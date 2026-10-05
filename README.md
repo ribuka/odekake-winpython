@@ -77,6 +77,26 @@ build-offline.bat -ProjectRoot D:\work\myproject
 削除したくないときは、`config\settings.local.json` に `"pruneWinPython": false` と書きます。
 (`build-offline.bat` に `-PruneWinPython:$false` を付けると、エラーになります。)
 
+### WinPython のキャッシュ
+
+ダウンロードした WinPython の zip は、このリポジトリの `.build\downloads\` に保存されます。
+2回目以降は、ファイルの SHA-256 が一致すれば、ダウンロードせずにこれを使います。
+
+```
+odekake-winpython\
+└─ .build\
+   └─ downloads\
+      └─ WinPython64-3.13.15.0dot.zip
+```
+
+`.build\` は git の管理外なので、別の PC に clone したときや `.build\` を消したときは、ダウンロードし直しになります。
+また、古い版の WinPython は、いずれ配布元から取れなくなるかもしれません。
+
+そのため、この zip は別の場所(NAS など)に控えておくことを勧めます。
+控えた zip を `.build\downloads\` に同じファイル名で置けば、ダウンロードせずに使います。
+ファイル名は、`build-offline.ps1` の `$WinPythonTable` にある URL の末尾と同じです。
+置いたファイルが正しいかは SHA-256 で照合し、一致しなければダウンロードし直します。
+
 ## 出力される ZIP
 
 ファイル名は `<name>-<version>_yyyymmddTHHmmss.zip` です。中身は次のとおりです。
