@@ -179,6 +179,8 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
 ```
 odekake-winpython\
 ├─ build-offline.ps1 / build-offline.bat
+├─ lib\*.ps1                     ← build-offline.ps1 から dot-source する関数(§14)
+├─ tests\*.Tests.ps1             ← Pester 5 の単体テスト(§14)。リリースの zip には入れない(export-ignore)
 ├─ config\settings.json          ← コミットする
 ├─ config\settings.local.json    ← gitignore
 ├─ logs\                         ← gitignore
@@ -251,9 +253,9 @@ spec に書かれていなかったため、実装時に決めたもの。変更
 - ZIP は `ZipArchive` でエントリを1つずつ追加して作り、区切りは必ず `/` にする。PS 5.1(.NET Framework)の `ZipFile.CreateFromDirectory` は区切りに `\` を使い、ZIP の規格に反するため使わない(2026-10-06、実プロジェクトの成果物で判明)。空フォルダも入れる。
 - 対象プロジェクトに `winpython.zip` や `winpython\` があると成果物と衝突するので、エラーにする。
 
-## 14. 今後の課題: build-offline.ps1 の分割と単体テスト
+## 14. build-offline.ps1 の分割と単体テスト
 
-2026-10-06 時点で `build-offline.ps1` は約750行の1ファイル。保守性のため、責務ごとにファイルを分け、ビルドを走らせずに確かめられる部分に単体テストを付ける。着手はユーザーの指示を待つ。
+2026-10-06 時点で `build-offline.ps1` は約750行の1ファイルだった。保守性のため、責務ごとにファイルを分け、ビルドを走らせずに確かめられる部分に単体テストを付けた(issue #2)。
 
 ### 目的
 - 分割そのものより、設定の読み込み・pyproject の読み取り・Python バージョンの決定・ファイル列挙を、WinPython のダウンロードなしで数秒で確かめられるようにすることが主目的。
@@ -307,9 +309,27 @@ odekake-winpython\
 - Zip.Tests.ps1
   - エントリ名の区切りが `/` だけになる(§13)。空フォルダが入る。`Store` のエントリが無圧縮になる。
 
-### 前提・未決定
-- テストには Pester 5 が要る。Windows 標準の Pester は 3.4 で書き方が違う。`Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck` で入れる。Pester 5 を前提にしてよいか。(未決定)
-- テストの実行方法(例: `Invoke-Pester tests`)を README に書くか、`run-tests.bat` を置くか。(未決定)
+### 前提
+- テストは Pester 5 を前提にする。(確定)Windows 標準の Pester は 3.4 で書き方が違う。`Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -MaximumVersion 5.99` で入れる。
+  - `-MaximumVersion` を付けないと、2026-10 時点では Pester 6.2.0 が入る。6 での動作は確かめていない。
+  - PS 5.1 では、先に `Install-PackageProvider NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force` が要った(2026-10-06 確認)。
+  - 5.1 と 7 はモジュールのフォルダが別なので、それぞれに入れる。
+- テストの実行方法(`Invoke-Pester tests`)は README に書く。`run-tests.bat` は置かない。(確定)
+
+### 実装で決めたこと
+- `Open-LogFile` は `($Name, $LogDir, $Timestamp)` を受け取る。ログの状態(`LogBuffer`, `LogPath`, 書き込みに使う UTF-8 BOM なしの Encoding)は Log.ps1 の先頭で `$script:` に初期化する。
+- `Read-SettingsFile` は `($Path, $SettingTypes)`、`Get-EffectiveSettings` は `($BoundParameters, $SettingTypes, $RepoRoot)`、`Get-WinPythonArchive` は `($Entry, $BuildDir)`、`Expand-WinPython` は `($Archive, $Destination, $WorkDir)` を受け取る。
+- `$EnvOverrides` も固定値として `build-offline.ps1` の先頭に移した。
+- Settings.Tests.ps1 は、`$SettingTypes` を `build-offline.ps1` から構文解析で取り出して使う(スクリプトは実行しない)。テスト側に設定キーの写しを持たないため。
+- Project.Tests.ps1 の Get-ProjectFiles は、`GIT_CONFIG_GLOBAL` を空のファイルに、`GIT_CONFIG_NOSYSTEM=1` にして呼ぶ。利用者のグローバルな除外設定などに結果が左右されないため。
+- issue #2 に「既知のバグ」として挙がっていた2点(大文字小文字だけ違うキーが通る、ZIP のエントリ名の区切りが `\`)は、分割前の時点で既に直っていた(`-ccontains`、`-replace '\\', '/'`)。テストはこれらの再発を検出する。直した箇所をわざと元に戻すとテストが失敗することを確認した(2026-10-06)。
+
+### 確認の記録
+- 2026-10-06、試験用 uv プロジェクト(requests に依存、3.13、日本語のファイル名を含む)で、分割の前後を PS 5.1 / 7 の両方でビルドして比べた。
+  - どちらもビルドに成功した。ログ(時刻・パス・サイズ・SHA-256・所要時間以外)は一致した。
+  - 外側 ZIP と winpython.zip のエントリ一覧(名前とサイズ)は一致した。違ったのは、外側 ZIP の中の winpython.zip のサイズだけだった(数十バイト)。同じ版で2回ビルドしても1バイト違ったので、ビルドのたびに揺れるものと判断した(原因は未調査)。
+  - エラー系(git でない、未知のキー、未対応の Python、VERSION なし)のメッセージは一致した。違うのはスタックトレースの行番号とファイル名だけ。
+- `Invoke-Pester tests` は PS 5.1.26100 / 7.6.6(Pester 5.9.1)の両方で 51 件すべて成功した。テストはネットワークを使わない(git はローカルのリポジトリにだけ使う)。ネットワークを切った状態での実行はしていない。
 
 ### 完了の条件
 - 分割の前後で、試験用 uv プロジェクトに対するビルドが PS 5.1 と 7 の両方で成功し、ログの内容(時刻とパス以外)と、外側 ZIP・winpython.zip のエントリ一覧が一致する。

@@ -133,3 +133,21 @@ ZIP が壊れていないか確かめるには、持ち出し先で次を実行�
 ```powershell
 Get-FileHash .\myproject-1.0.0_20261006T120000.zip -Algorithm SHA256
 ```
+
+## テスト(このリポジトリを修正する人向け)
+
+`lib\*.ps1` の一部に、Pester 5 の単体テストがあります(`tests\`)。WinPython のダウンロードもネットワークも使わず、数秒で終わります。`git` は使います。
+
+Windows 標準の Pester は 3.4 で、このテストは動きません。初回だけ Pester 5 を入れてください(PowerShell 5.1 と 7 は別々に入れる必要があります)。
+
+```powershell
+# PowerShell 5.1 では、先に NuGet プロバイダーが要ることがあります
+Install-PackageProvider NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force
+Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -MaximumVersion 5.99
+```
+
+リポジトリのフォルダで次を実行します。
+
+```powershell
+Invoke-Pester tests
+```
