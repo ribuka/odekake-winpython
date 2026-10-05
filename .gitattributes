@@ -1,0 +1,8 @@
+/.github/ export-ignore
+/AGENTS.md export-ignore
+/CLAUDE.md export-ignore
+/tests/ export-ignore
+/.agents/ export-ignore
+/.gitattributes export-ignore
+/.claude/ export-ignore
+/.githooks/ export-ignore

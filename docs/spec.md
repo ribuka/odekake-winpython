@@ -1,6 +1,6 @@
 # odekake-winpython 仕様(2026-10-06 確定版)
 
-handoff-original.md の要件を、2026-10-05〜06 の検討で改めたもの。original と矛盾する場合はこのファイルを優先する。
+元の要件定義(リポジトリ外)を、2026-10-05〜06 の検討で改めたもの。
 旧 docs/handoff-addendum.md を整理し直したもので、検討の経緯は git 履歴を参照。
 
 表記:
@@ -14,10 +14,6 @@ handoff-original.md の要件を、2026-10-05〜06 の検討で改めたもの�
 
 - 任意の uv プロジェクトを、オフラインの Windows 環境へ持ち出すための ZIP にする汎用 PowerShell スクリプト。特定リポジトリ専用ではない。(確定)
 - スクリプトはこのリポジトリ(odekake-winpython)に置く。対象プロジェクトはスクリプトの外にある。(確定)
-- original のうち、次の項目は無効:
-  - §1「$PSScriptRoot から repo root を解決」: `$PSScriptRoot` は、このリポジトリ内のファイル(config, logs, .build)の場所を求めるのに使う。対象プロジェクトの場所は §3 で決める。
-  - 「repository-local」「対象 repo を inspect して決める」: 対象ごとに変わる部分は、設定と引数で受け取る。
-  - §7 の A/B(ソース同梱 / pip install): どちらも採らない。§2 を参照。
 - 用語:
   - **対象プロジェクト**: ZIP にする uv プロジェクト。pyproject.toml と uv.lock があるフォルダ。
   - **このリポジトリ**: odekake-winpython。
@@ -43,12 +39,12 @@ handoff-original.md の要件を、2026-10-05〜06 の検討で改めたもの�
   - 自分のコードはインストールしない。代わりに `winpython\python\Lib\site-packages\` に `.pth` ファイルを1つ置き、中身を `..\..\..\..\src` にする。
   - 2026-10-06 に実機で確認済み: 新規作成した import 確認用パッケージを `src\` に置いて import でき、フォルダごと移設した後も import できた。
   - 同じ規約(`<project>\winpython\` + `<project>\src\`)を守るプロジェクト間なら、`.pth` は共通で使える。
-  - `.pth` のファイル名(未決定。実装時に決めてよい)。
+  - `.pth` のファイル名は `odekake-src.pth`。(確定)
 - **外側 ZIP に入れるファイル**:
   - 既定は、gitignore されていない全ファイル(未 add のファイルを含む。`git ls-files --cached --others --exclude-standard` 相当)。(確定)
   - `trackedOnly` で、add 済みのファイルだけに切り替えられる。(確定)
   - `exclude` で、指定したパターンに当たるファイルを除外できる。(確定)
-- **外側 ZIP の最上位**: ZIP 直下にファイルを置くか、`<name>\` フォルダを1段挟むか。(未決定)
+- **外側 ZIP の最上位**: フォルダを挟まず、ZIP 直下にファイルを置く(上の図のとおり)。(確定)
 - **起動用 .bat**: 対象アプリを起動する .bat は生成しない。起動方法はユーザーが搬入先で自分で整える。(確定)
 
 ## 3. 対象プロジェクトの指定(確定)
@@ -57,7 +53,7 @@ handoff-original.md の要件を、2026-10-05〜06 の検討で改めたもの�
 - 指定がなければ、フォルダ選択ダイアログ(.NET `FolderBrowserDialog`)を出す。キャンセルしたら何もせず終了する。
 - GUI はフォルダ選択だけ。その他の設定は設定ファイルと引数で行う。
 - pyproject.toml または uv.lock がなければエラー。
-- 対象が git リポジトリでない場合(ファイル収集に git を使うため): エラーにする案。(未決定)
+- 対象が git リポジトリでない場合は、エラーにする(ファイル収集に git を使うため)。(確定)
 
 ## 4. ビルドの流れ
 
@@ -79,12 +75,14 @@ handoff-original.md の要件を、2026-10-05〜06 の検討で改めたもの�
 12. 外側 ZIP の SHA-256 を計算し、画面とログに出す。
 13. 結果をポップアップで表示する(§9)。
 
-- original §9 の「残骸の除去」(pip キャッシュ・一時 requirements など)は踏襲する。役割の分からないものは消さない。
+- 一時ファイル(requirements、pip キャッシュ等)は残さない。WinPython 内のファイルは、役割の分からないものは消さない。
 
 ## 5. WinPython と Python バージョン(確定)
 
 - 使うのは WinPython の **dot** 版(最小構成)。2026-03 リリース(安定版)で固定する。
-- Python バージョンは `.python-version` から読む。なければ `pythonVersion` で指定する。
+- Python バージョンの優先順位は **引数 `-PythonVersion` > `.python-version` > 設定ファイルの `pythonVersion`**。(確定)
+  - §8 の「引数 > 設定ファイル > 既定値」の例外。設定ファイルの値は、`.python-version` がないときだけ使う。
+  - 引数と `.python-version` のマイナーバージョンが違えば、警告をログに出す。
 - マイナーバージョン(3.13 等)で、次の対応表を引く。表にないバージョンはエラーにする。最新版へのフォールバックはしない。
 - URL は規則から組み立てず、完全な形で対応表に持つ。タグ名 `17.12.20260522/WinPython` が、リリース名とも日付とも一致しないため。
 
@@ -131,19 +129,24 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
 |---|---|---|---|
 | (なし) | `-ProjectRoot` | パス | なし → フォルダ選択ダイアログ |
 | (なし) | `-ConfigPath` | パス | `config\settings.json`(同じフォルダの `settings.local.json` も読む) |
-| `pythonVersion` | `-PythonVersion` | 文字列 | `.python-version` の値 |
+| `pythonVersion` | `-PythonVersion` | 文字列 | `.python-version` の値。優先順位は §5 |
 | `outputDir` | `-OutputDir` | パス | ダウンロードフォルダ |
 | `trackedOnly` | `-TrackedOnly` | 真偽値 | false(未 add のファイルも含める) |
 | `groups` | `-Groups` | 文字列の配列 | 空(dev も含めない) |
 | `extras` | `-Extras` | 文字列の配列 | 空 |
 | `exclude` | `-Exclude` | 文字列の配列 | 空。外側 ZIP から除外するパターン |
-| `pruneWinPython` | `-PruneWinPython` | 真偽値 | false |
+| `pruneWinPython` | `-PruneWinPython` | 真偽値 | false(`config\settings.json` で true にしている) |
 | `importName` | `-ImportName` | 文字列 | pyproject の `name`(`-` → `_`) |
 | `noPopup` | `-NoPopup` | 真偽値 | false |
 
 - `projectRoot` と `configPath` は設定キーにしない。設定ファイルの場所がそれらで決まるため。
-- `exclude` は git pathspec の exclude 指定で実現する想定。git pathspec と .gitignore の書式は完全には同じではない。どちらの書式に合わせるか(未決定。実装時に提案すること)。
-- `pruneWinPython` の目的は、容量削減ではなく、展開時に目に入るノイズを減らすこと。対象は WinPython 最上位の階層だけ。
+- `exclude` は git pathspec(glob)の書式で書き、`:(exclude,glob)<パターン>` として git に渡す。対象プロジェクトの最上位からの相対パスで書く。(確定)
+  - 例: `docs/**`, `**/*.log`, `tests`(フォルダごと)。
+  - .gitignore と違い、`*.log` は最上位のファイルにしか当たらない。どの階層にも当てるなら `**/*.log`。
+- `pruneWinPython` は、スクリプトの既定値は false のまま、コミットする `config\settings.json` で true にする。これで通常は削除される。(確定、2026-10-06)
+  - 残したいときは、`settings.local.json` に `"pruneWinPython": false` と書く。
+  - 引数 `-PruneWinPython:$false` は、PowerShell から ps1 を直接呼ぶときだけ使える。.bat 経由(`powershell.exe -File`)では `$false` が文字列として渡り、エラーになる(2026-10-06 確認)。
+  - 目的は、容量削減ではなく、展開時に目に入るノイズを減らすこと。対象は WinPython 最上位の階層だけ。
   - 削除する: `Jupyter Lab.exe`, `Jupyter Notebook.exe`, `Spyder.exe`, `Spyder reset.exe`, `VS Code.exe`, `notebooks\`, `wheelhouse\`
   - 残す: `IDLE (Python GUI).exe`, `WinPython Command Prompt.exe`, `WinPython Powershell Prompt.exe`, `WinPython Interpreter.exe`, `WinPython Control Panel.exe`, `license.txt`, `python\`, `scripts\`
 
@@ -165,13 +168,13 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
   - 成功時: 出力パスと SHA-256。
   - 失敗時: エラー内容とログのパス。
   - `noPopup` で抑止できる。
-- スクリプトと .bat のファイル名・配置(original の例は `scripts\build-offline.ps1`)。(未決定。実装時に提案すること)
+- スクリプトと .bat は、このリポジトリ直下の `build-offline.ps1` と `build-offline.bat`。(確定)
 
 ## 10. このリポジトリの構成
 
 ```
 odekake-winpython\
-├─ <script>.ps1 / <script>.bat   ← 名前・配置は未決定
+├─ build-offline.ps1 / build-offline.bat
 ├─ config\settings.json          ← コミットする
 ├─ config\settings.local.json    ← gitignore
 ├─ logs\                         ← gitignore
@@ -190,10 +193,112 @@ odekake-winpython\
 - PowerShell 5.1 と 7.6.6 は、どちらも既定で STA。フォルダ選択ダイアログを出せる。
 - uv 0.11.16 の `uv export` に次のフラグがある: `--frozen`, `--no-dev`, `--no-emit-project`, `--no-hashes`, `--no-default-groups`, `--group`, `--all-groups`, `--extra`, `--all-extras`, `--format`, `-o/--output-file`。
 - 参照: https://winpython.github.io/ , https://winpython.github.io/releases.html
+- 3.13 dot は packaging 26.2 を同梱している。lock がこれと違う版を指していれば、pip が入れ替える(試験用プロジェクトで 26.3 に入れ替わった)。
+- git pathspec の `:(exclude,glob)` で、`tests` はフォルダごと、`*.log` は最上位だけ、`**/*.log` は全階層に当たる(2026-10-06 確認)。
 
-## 12. 実装時に確認すること
+## 12. 受け入れ基準と未確認事項
 
-- uv export は、既定でハッシュを出力する。pip はハッシュ照合モードになり、ハッシュのない行(path/git 依存など)があると失敗する。(推測) ハッシュ付きのまま pip に渡せるか確認する。
-- PS 5.1 のフォルダ選択ダイアログの見た目。古いツリー形式になる可能性がある。
-- ZIP の作成には `System.IO.Compression.ZipFile` を使う。5.1 の Compress-Archive には難がある。(未検証の認識)
-- 受け入れ基準は original の Acceptance Criteria を踏襲する。別の展開先パスでのテストを含む。
+### 受け入れ基準
+元の要件定義(リポジトリ外)の Acceptance Criteria を、汎用スクリプトに合わせて書き直したもの。
+
+1. コマンド1つ(または build-offline.bat のダブルクリック)で、対象プロジェクトから ZIP を作れる。— 確認済み(試験用プロジェクト・実プロジェクト)
+2. 対象プロジェクトの既存の .venv に依存しない。— 確認済み(子プロセスの環境変数を外し、WinPython の python.exe だけを使う。§13)
+3. 同梱する Python 実行環境は WinPython である。— 確認済み
+4. 依存は uv.lock の固定された状態から入れる。— 確認済み(`uv export --frozen`)
+5. ビルドの失敗が、はっきり分かる。— 確認済み(ポップアップ、ログ、終了コード)
+6. 成果物を別の Windows PC にコピーできる(1ファイル)。— 確認済み
+7. インターネットもシステムの Python もない PC で展開し、同梱の WinPython で対象のコードを import できる。別の展開先パス(日本語・空白を含む)でも動く。— 別パスは確認済み。インターネットも Python もない PC では未確認
+8. 再ビルドで、必要がなければ WinPython をダウンロードし直さない。— 確認済み
+9. 一時ファイルが git にコミットされない。— このリポジトリの `.build\`, `logs\` は gitignore 済み。対象プロジェクトには何も書かない
+
+確認の記録:
+- 2026-10-06 に、試験用の uv プロジェクト(requests に依存)で確認: 5.1 / 7 の両方でビルド成功。成果物を日本語と空白を含む別のパスに展開し、`python -I -c "import <パッケージ>, requests"` が通った。2回目以降は WinPython をダウンロードせずキャッシュを使った。
+- 2026-10-06 に、ユーザーが実プロジェクトでビルドし、成功・完了ポップアップの表示を確認。
+
+### 未確認事項・実装時のメモ
+- インターネットも Python もない別の PC での実行。(未確認)
+- uv export は、既定でハッシュを出力する。pip はハッシュ照合モードになる。
+  - PyPI の依存だけなら、ハッシュ付きのまま pip に渡して成功した(2026-10-06 確認)。
+  - ハッシュのない行(path/git 依存など)がある場合に失敗するか。(未検証)
+- PS 5.1 のフォルダ選択ダイアログの見た目。古いツリー形式になる可能性がある。(未確認。目視が必要)
+- ZIP の作成には `System.IO.Compression.ZipFile` / `ZipArchive` を使った。5.1 と 7 の両方で作成・展開できた。
+
+## 13. 実装で決めた細部
+
+spec に書かれていなかったため、実装時に決めたもの。変更してよい。
+
+- `outputDir` のフォルダがなければエラーにする(打ち間違いで意図しないフォルダを作らないため)。(確定)
+- 相対パスの引数・設定は、カレントフォルダを基準に解決する。
+- 配列の引数(`-Groups` など)は、カンマ区切りも受け付ける。.bat 経由(`-File`)だと `-Groups a,b` が1つの文字列で届くため。
+- 作業用フォルダ `.build\work\` は、ビルド開始時に前回分を消す。成功時は消し、失敗時は調査用に残す。
+- pyproject.toml は正規表現で読む(PowerShell に TOML パーサーがないため)。`[project]` の `name` / `version` が1行の文字列で書かれている前提。
+- 動作確認の import は `python -I`(カレントフォルダを sys.path に入れない)で行い、`.pth` を経由して import できることを確かめる。
+- ビルド中は、子プロセスの環境変数 `PYTHONPATH`, `PYTHONHOME`, `VIRTUAL_ENV` 等を外し、`PYTHONNOUSERSITE=1` にする。開発環境の影響を受けないため。
+- 外側 ZIP 内で `winpython.zip` は無圧縮で格納する(中身が zip のため)。
+- ZIP は `ZipArchive` でエントリを1つずつ追加して作り、区切りは必ず `/` にする。PS 5.1(.NET Framework)の `ZipFile.CreateFromDirectory` は区切りに `\` を使い、ZIP の規格に反するため使わない(2026-10-06、実プロジェクトの成果物で判明)。空フォルダも入れる。
+- 対象プロジェクトに `winpython.zip` や `winpython\` があると成果物と衝突するので、エラーにする。
+
+## 14. 今後の課題: build-offline.ps1 の分割と単体テスト
+
+2026-10-06 時点で `build-offline.ps1` は約750行の1ファイル。保守性のため、責務ごとにファイルを分け、ビルドを走らせずに確かめられる部分に単体テストを付ける。着手はユーザーの指示を待つ。
+
+### 目的
+- 分割そのものより、設定の読み込み・pyproject の読み取り・Python バージョンの決定・ファイル列挙を、WinPython のダウンロードなしで数秒で確かめられるようにすることが主目的。
+- 利用者から見た動作(引数、設定キー、成果物、ログ、.bat)は一切変えない。
+
+### 分割後の構成
+```
+odekake-winpython\
+├─ build-offline.ps1        ← param、固定値、本体(Invoke-Build)、終了処理だけ。lib\*.ps1 を dot-source する
+├─ build-offline.bat        ← 変更なし
+├─ lib\
+│  ├─ Log.ps1               ← Write-Log, Write-Step, Open-LogFile, Invoke-Native
+│  ├─ Settings.ps1          ← Resolve-FullPath, Read-SettingsFile, Get-EffectiveSettings
+│  ├─ Project.ps1           ← Read-PyProject, Get-ProjectVersion, Get-PythonMinor, Get-ProjectFiles
+│  ├─ WinPython.ps1         ← Get-Sha256, Get-WinPythonArchive, Expand-WinPython
+│  ├─ Zip.ps1               ← New-ZipFile, New-ZipFromDirectory
+│  └─ Gui.ps1               ← New-TopMostOwner, Select-ProjectFolder, Show-Popup, Get-DownloadsFolder
+└─ tests\
+   ├─ Settings.Tests.ps1
+   ├─ Project.Tests.ps1
+   └─ Zip.Tests.ps1
+```
+- 固定値(`$WinPythonTable`, `$PruneTargets`, `$SettingTypes`, `$PthFileName`, `$PthContent`, `$EnvOverrides`)は `build-offline.ps1` の先頭に残す。WinPython の版を上げるときに見る場所を1か所にするため。
+- 読み込みは `build-offline.ps1` で `foreach ($f in 'Log','Settings','Project','WinPython','Zip','Gui') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }`。
+
+### 作業の手順
+1. 関数が暗黙に参照しているスクリプト変数を、引数で受け取る形に直す(テストから呼べるようにするため)。対象:
+   - `Read-SettingsFile`, `Get-EffectiveSettings` → `$SettingTypes`, `$RepoRoot`
+   - `Get-WinPythonArchive` → `$BuildDir`
+   - `Expand-WinPython` → `$WorkDir`
+   - `Open-LogFile`, `Write-Log` → `$LogDir`, `$Timestamp`, `$Utf8NoBom`, `$script:LogPath`, `$script:LogBuffer`。ログはスクリプト全体で1つの状態なので、`$script:` のまま残してよい。その場合、Log.ps1 の先頭で初期化する。
+2. 関数を上の対応で `lib\*.ps1` に移す。中身は変えない。
+3. `lib\*.ps1` も **BOM 付き UTF-8** で保存する(PS 5.1 が日本語を読めないため。§11 参照)。
+4. `build-offline.ps1` から dot-source する。
+5. 動作確認(下の「完了の条件」)。
+6. テストを書く。
+
+### テストに入れるケース
+- Settings.Tests.ps1(一時フォルダに settings.json / settings.local.json を書いて呼ぶ)
+  - ファイルがなくても既定値が返る。
+  - 優先順位: 引数 > settings.local.json > settings.json > 既定値。キー単位でマージされる。
+  - 未知のキーはエラー。大文字小文字だけ違うキー(`outputdir`)もエラー。
+  - 型違い(`"trackedOnly": "yes"`, `"groups": "dev"`)はエラー。
+  - 配列の引数 `-Groups 'a,b'` が `a`, `b` の2つに分かれる。
+  - 引数の `pythonVersion` は、ここでは上書きしない(§5 の優先順位は Get-PythonMinor で扱う)。
+- Project.Tests.ps1
+  - Read-PyProject: 通常 / シングルクォート / `dynamic = ["version"]`(複数行を含む)/ `[tool.x]` や `[[tool.uv.index]]` の `name` を拾わない。
+  - Get-ProjectVersion: VERSION ファイルの前後の空白・改行を除く / VERSION がない / 2行以上ある。
+  - Get-PythonMinor: 引数 > .python-version > 設定ファイル / `3.13.5` や `cpython-3.13` を 3.13 と読む / 引数と .python-version が違うと警告 / どれもないとエラー。
+  - Get-ProjectFiles(一時フォルダで `git init` して作る): 既定は未 add のファイルを含む / `trackedOnly` / `exclude` の `tests`, `*.log`, `**/*.log`(§11 の挙動)/ 削除済みファイルはスキップ / `winpython.zip` や `winpython/` があるとエラー / 日本語のファイル名。
+- Zip.Tests.ps1
+  - エントリ名の区切りが `/` だけになる(§13)。空フォルダが入る。`Store` のエントリが無圧縮になる。
+
+### 前提・未決定
+- テストには Pester 5 が要る。Windows 標準の Pester は 3.4 で書き方が違う。`Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck` で入れる。Pester 5 を前提にしてよいか。(未決定)
+- テストの実行方法(例: `Invoke-Pester tests`)を README に書くか、`run-tests.bat` を置くか。(未決定)
+
+### 完了の条件
+- 分割の前後で、試験用 uv プロジェクトに対するビルドが PS 5.1 と 7 の両方で成功し、ログの内容(時刻とパス以外)と、外側 ZIP・winpython.zip のエントリ一覧が一致する。
+- エラー系(git でない、未知のキー、未対応の Python、VERSION なし)のメッセージが変わらない。
+- `Invoke-Pester tests` が PS 5.1 と 7 の両方で通る。ネットワークにつながっていなくても通る。
