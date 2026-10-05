@@ -180,6 +180,8 @@ odekake-winpython\
 ├─ logs\                         ← gitignore
 ├─ .build\                       ← gitignore(WinPython キャッシュ、作業用フォルダ)
 └─ docs\
+   ├─ spec.md
+   └─ issues.md                  ← 課題の仮置き場(リモート公開後に GitHub の issue へ移す)
 ```
 
 ## 11. 確認済みの事実
