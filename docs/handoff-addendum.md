@@ -22,9 +22,9 @@ original §7 の A/B(ソース同梱 / pip install)はどちらも採らない�
 - WinPython を二重 ZIP にするのは、ファイル数の多いランタイムを1ファイルで運ぶため。また依存が近い別プロジェクトで流用する可能性がある。
 - 搬入先では `<project>\winpython\` に展開する規約とする。ビルド時に WinPython 配布物の最上位フォルダ(`WPy64-...` 等)を取り除き、winpython.zip を展開すると直接 `winpython\python\...` になるようにする。
   - `.venv` という名前は使わない。uv が壊れた venv とみなして作り直す恐れがある(推測)。
-- 対象プロジェクトは `[build-system]`(hatchling 等)を持ち、開発時は uv が自分のコードを editable インストールしている前提。そのため自分のコードはインストールせず、site-packages に `.pth` を1つ置いて `src` を import パスに加える(例: `..\..\..\src`。正確な相対パスは展開後の構造で確定)。
+- 対象プロジェクトは `[build-system]`(hatchling 等)を持ち、開発時は uv が自分のコードを editable インストールしている前提。そのため自分のコードはインストールせず、site-packages に `.pth` を1つ置いて `src` を import パスに加える(`.pth` の中身は `..\..\..\..\src`。site-packages は `winpython\python\Lib\site-packages` にあるため。2026-10-06 に実機で import と移設後の import を確認済み)。
   - 「`<project>\winpython\` に展開し、コードは `<project>\src\`」という規約を守るプロジェクト間なら、`.pth` は共通で使える。
-- uv export は `--no-emit-project` 相当で自分のプロジェクトを除外する(フラグ名は要確認)。
+- uv export は `--no-emit-project` で自分のプロジェクトを除外する。
 - 外側の ZIP に入れるファイル: 既定は「gitignore されていない全ファイル」(未 add のファイルを含む。`git ls-files --cached --others --exclude-standard` 相当)。設定で「add 済みのみ」に切り替えられる。
 - 起動は `python -m <module>` 形式を推奨する。pip が生成する `.exe` ランチャーは絶対パスを埋め込むため、移設で壊れる可能性が高い。
 - 設定は設定ファイルと引数の両方で指定できるようにする。
@@ -47,7 +47,7 @@ original §7 の A/B(ソース同梱 / pip install)はどちらも採らない�
   - 指定がなければ、フォルダ選択ダイアログ(.NET `FolderBrowserDialog`)を出す。キャンセルしたら何もせず終了する。
   - pyproject.toml または uv.lock がなければエラー。
   - GUI はフォルダ選択だけ。その他の設定は設定ファイルと引数で行う。
-  - 要検証: PS 5.1 では古い形式のダイアログになる可能性がある。PS 7 の標準の実行モードが STA かどうか。
+  - 要検証: PS 5.1 では古い形式のダイアログになる可能性がある。(STA は 5.1/7 とも既定で確認済み)
 
 ## 2. 確認済みの事実(2026-10-05、Web調査)
 - WinPython は 2026-03 以降、dot / slim / dotf / slimf の4種のみ。最小は dot。
@@ -56,10 +56,22 @@ original §7 の A/B(ソース同梱 / pip install)はどちらも採らない�
 - 全ファイルの SHA-256 が md5_sha1.txt で公開 → 期待ハッシュを固定して検証可能。
 - 2026-04 はベータ(10/4時点 b3)。安定版で固定するなら 2026-03。
 - 参照: https://winpython.github.io/ , https://winpython.github.io/releases.html
-- 未確認: 2026-03 dot zip の正確なURLとSHA-256、展開後のトップディレクトリ名。
+- 2026-03 dot zip(2026-10-06 確認。GitHub API の digest と md5_sha1.txt の SHA-256 が一致):
+  - 3.13: https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.13.15.0dot.zip
+    SHA-256 `28e36408f0140c50b207ea059a599c664564e68a3cbb835f03a71f4601efd8f1`(28,158,845 bytes)
+  - 3.14: https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.14.7.0dot.zip
+    SHA-256 `dbabedfb50eeb3c2c63dc43c9cb6239eae4a582c3bfd9a5f2ffd00a09b49a527`(28,663,262 bytes)
+  - タグ名は `17.12.20260522/WinPython` で、リリース名(2026-03)や日付とは一致しない。URL は規則から組み立てず、対応表に完全な形で持つこと。
+- 3.13 dot zip の中身(実物で確認):
+  - 最上位フォルダは `WPy64-313150`(バージョン由来の名前)。その下に `python\`、`scripts\`、`notebooks\`、`wheelhouse\` や各種ランチャー .exe がある。
+  - `python\python.exe`、`python\Lib\site-packages\` がある。pip 26.2.1 が同梱されている。`._pth` ファイルはないので、`.pth` は有効。
+  - `scripts\env.bat` は PATH(`python\`、`python\Scripts` など)と `PYTHONIOENCODING=utf-8`、`HOME` を設定する。
+  - 同梱の wppm には、pip のランチャーを移設可能にする処理(`patch_standard_packages('pip', to_movable=True)`、`--movable`)がある。WinPython では console script の .exe も移設に耐える可能性がある(未検証)。
+- PowerShell 5.1 と 7.6.6 は、どちらも既定で STA(フォルダ選択ダイアログを出せる)。
+- uv 0.11.16 の `uv export` に `--frozen`、`--no-dev`、`--no-emit-project`、`--no-hashes`、`--format`、`-o/--output-file`、`--group`、`--all-groups` があることを確認した。
 
 ## 3. 実装上の注意
-- uv export はデフォルトでプロジェクト自身を出力する。§1.5 の方式では `--no-emit-project` 相当で除外する(フラグ名は要確認)。
+- uv export はデフォルトでプロジェクト自身を出力する。§1.5 の方式では `--no-emit-project` で除外する。
 - uv export はデフォルトでハッシュを出力するはず。pip はハッシュ照合モードになり、ハッシュのない行(path/git 依存など)があると失敗する(推測、要確認)。
 - pip 生成の console script ランチャー(.exe)は python.exe の絶対パスを埋め込むため、移設で壊れる可能性が高い。python -m 起動なら影響なし。
 - PS 5.1/7 両対応なら ZIP 作成は System.IO.Compression.ZipFile 推奨(5.1 の Compress-Archive に難ありという認識。未検証)。
@@ -79,9 +91,43 @@ original §7 の A/B(ソース同梱 / pip install)はどちらも採らない�
 7. 成果物名 → §1.5
 8. `-Force` は設けない。キャッシュ済み WinPython が期待 SHA-256 と一致しなければ自動で再ダウンロードする。
 9. 置き場所: 出力先は §1.5。キャッシュと作業用フォルダはこのリポジトリの `.build\`。
-10. dev 依存: 設定項目として持つ。既定は含めない(`--no-dev`)。
-11. 設定ファイル: `<ProjectRoot>\odekake-winpython.json`。優先順位は 引数 > 設定ファイル > 既定値。
+10. dev 依存: 設定項目として持つ。既定は含めない。dev 以外のグループや extras も含め、§5 の `groups` / `extras` で指定する。
+11. 設定ファイル: このリポジトリの `config\settings.json`(全プロジェクト共通の1ファイル)と `config\settings.local.json`(個人用、gitignore)。優先順位は 引数 > settings.local.json > settings.json > 既定値。プロジェクトごとの指定は引数で渡す。
 
-## 5. 未確定・要確認
-- 設定項目と引数の名前(未 add ファイルを含めるか、出力先、Python バージョン、dev 依存、import 名、ポップアップ抑止)。
-- 要確認の事実: 2026-03 dot zip の URL・SHA-256・展開後の構造、`uv export` の正確なフラグ、PS 7 の STA、PS 5.1 のフォルダ選択ダイアログの見た目。
+## 5. 設定項目と要確認事項
+- 設定項目と引数の名前(2026-10-06 確定):
+  - 原則: 設定ファイルのキーと引数は同じ名前にする(キーは camelCase、引数は PascalCase)。真偽値は既定が false になる向きで名付ける(PowerShell のスイッチ引数は「付けると true」のため)。
+
+    | 設定キー | 引数 | 型 | 既定値 |
+    |---|---|---|---|
+    | (なし) | `-ProjectRoot` | パス | なし → フォルダ選択ダイアログ |
+    | (なし) | `-ConfigPath` | パス | このリポジトリの `config\settings.json`(と同じフォルダの `settings.local.json`) |
+    | `pythonVersion` | `-PythonVersion` | 文字列 | `.python-version` の値 |
+    | `outputDir` | `-OutputDir` | パス | ダウンロードフォルダ |
+    | `trackedOnly` | `-TrackedOnly` | 真偽値 | false(未 add のファイルも含める) |
+    | `groups` | `-Groups` | 文字列の配列 | 空。pyproject の default-groups は無視する(`--no-default-groups` + `--group`)。`includeDev` は廃止 |
+    | `extras` | `-Extras` | 文字列の配列 | 空(`--extra`) |
+    | `exclude` | `-Exclude` | 文字列の配列 | 空。外側 ZIP から除外する gitignore 形式のパターン(git pathspec の exclude で実現) |
+    | `pruneWinPython` | `-PruneWinPython` | 真偽値 | false。WinPython 内の不要なランチャー等を削除(目的は容量ではなくノイズ除去。削除対象は WinPython 最上位の `Jupyter Lab.exe`、`Jupyter Notebook.exe`、`Spyder.exe`、`Spyder reset.exe`、`VS Code.exe`、`notebooks\`、`wheelhouse\`。IDLE、WinPython の Command Prompt / Powershell Prompt / Interpreter / Control Panel、`license.txt`、`python\`、`scripts\` は残す。確定) |
+    | `importName` | `-ImportName` | 文字列 | pyproject の `name`(`-` → `_`) |
+    | `noPopup` | `-NoPopup` | 真偽値 | false |
+
+  - `projectRoot` と `configPath` を設定キーにしないのは、設定ファイルの場所がそれらで決まるため(鶏と卵)。
+  - 設定ファイルの例(すべて省略可能。書いたものだけ既定値を上書きする):
+    ```json
+    {
+      "pythonVersion": "3.13",
+      "outputDir": "D:\\export",
+      "trackedOnly": false,
+      "groups": [],
+      "importName": "myapp",
+      "noPopup": false
+    }
+    ```
+  - 未知のキーはエラーにする(確定)。
+  - 成果物名: pyproject の `name` の `_` を `-` に置換する(リポジトリのフォルダ名に寄せる。確定)。import の確認には `-` を `_` に置換した名前を使う。
+  - 設定ファイルはこのリポジトリ側に置く(確定)。対象プロジェクトは汚さない。
+  - 構成(確定): `config\settings.json` 1つで全プロジェクト共通。プロジェクトごとの指定(`groups`、`extras`、`exclude` 等)は引数で渡す。
+  - `config\settings.local.json` があれば settings.json より優先する(確定)。`*.local.json` は gitignore する。マージはキー単位(local に書いたキーだけ上書きし、書いていないキーは settings.json の値を使う。確定)。
+  - 個人の環境に依存する値(例: `outputDir`)は settings.local.json に書く想定。settings.json はコミットされるため、個人のパスを書かない。
+- 要確認の事実(実装時に確認): PS 5.1 のフォルダ選択ダイアログの見た目、uv export のハッシュ付き出力を pip がそのまま受け付けるか。
