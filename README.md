@@ -16,7 +16,7 @@ Python の実行環境には WinPython(dot 版)を使い、依存ライブラリ
 - `pyproject.toml` と `uv.lock` がある
 - git リポジトリである
 - 自分のコードが `src\` の下にある(`[build-system]` を持つ構成)
-- Python 3.13 か 3.14 を使う(`.python-version` などで指定)
+- `build-offline.ps1` の `$WinPythonTable` に載っている版(現在は 3.12 / 3.13 / 3.14 など)を使う(`.python-version` などで指定)。ほかの版は URL と SHA-256 を追加すれば使える
 
 ## 使い方
 

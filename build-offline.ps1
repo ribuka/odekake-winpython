@@ -32,13 +32,17 @@ $ProgressPreference = 'SilentlyContinue'   # 5.1 の Invoke-WebRequest は進捗
 # 固定値
 # ---------------------------------------------------------------------------
 
-# WinPython dot 版(2026-03 リリース)。URL は規則から組み立てず完全な形で持つ(spec §5)。
+# WinPython dot 版。リリースは行ごとに固定する(spec §5)。URL は規則から組み立てず完全な形で持つ。
 $WinPythonTable = @{
-    '3.13' = @{
+    '3.12' = @{   # 2025-03 リリース(3.12 がある最後の安定版)
+        Url    = 'https://github.com/winpython/winpython/releases/download/16.6.20250620final/Winpython64-3.12.10.1dot.zip'
+        Sha256 = '7a1f004aec39615977b2b245423a50115530d16af3418df77977186a555d0a40'
+    }
+    '3.13' = @{   # 2026-03 リリース
         Url    = 'https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.13.15.0dot.zip'
         Sha256 = '28e36408f0140c50b207ea059a599c664564e68a3cbb835f03a71f4601efd8f1'
     }
-    '3.14' = @{
+    '3.14' = @{   # 2026-03 リリース
         Url    = 'https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.14.7.0dot.zip'
         Sha256 = 'dbabedfb50eeb3c2c63dc43c9cb6239eae4a582c3bfd9a5f2ffd00a09b49a527'
     }

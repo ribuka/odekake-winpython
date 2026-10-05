@@ -79,17 +79,21 @@
 
 ## 5. WinPython と Python バージョン(確定)
 
-- 使うのは WinPython の **dot** 版(最小構成)。2026-03 リリース(安定版)で固定する。
+- 使うのは WinPython の **dot** 版(最小構成)。
+- リリースは、対応表の **行ごとに** 固定する。選ぶ規則: その版の dot の .zip があり、SHA-256 を2か所(GitHub API の digest と https://winpython.github.io/md5_sha1.txt)で確かめられる、いちばん新しい安定版リリース。(確定、2026-10-06。以前は全行を 2026-03 リリースで固定していた)
+  - 各行は、そのマイナー系の WinPython にある最新のパッチ版を同梱する。`.python-version` が `3.12.2` でも `3.12` の行(3.12.10)を使う。パッチ版そのものの同梱は別の issue で扱う。
+  - 3.11 以前は載せない。
 - Python バージョンの優先順位は **引数 `-PythonVersion` > `.python-version` > 設定ファイルの `pythonVersion`**。(確定)
   - §8 の「引数 > 設定ファイル > 既定値」の例外。設定ファイルの値は、`.python-version` がないときだけ使う。
   - 引数と `.python-version` のマイナーバージョンが違えば、警告をログに出す。
 - マイナーバージョン(3.13 等)で、次の対応表を引く。表にないバージョンはエラーにする。最新版へのフォールバックはしない。
-- URL は規則から組み立てず、完全な形で対応表に持つ。タグ名 `17.12.20260522/WinPython` が、リリース名とも日付とも一致しないため。
+- URL は規則から組み立てず、完全な形で対応表に持つ。タグ名(`17.12.20260522/WinPython`, `16.6.20250620final` など)が、リリース名とも日付とも一致せず、ファイル名の大文字小文字(`WinPython64-` / `Winpython64-`)もリリースで違うため。
 
-| Python | URL | SHA-256 | サイズ |
-|---|---|---|---|
-| 3.13 (3.13.15) | https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.13.15.0dot.zip | `28e36408f0140c50b207ea059a599c664564e68a3cbb835f03a71f4601efd8f1` | 28,158,845 |
-| 3.14 (3.14.7) | https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.14.7.0dot.zip | `dbabedfb50eeb3c2c63dc43c9cb6239eae4a582c3bfd9a5f2ffd00a09b49a527` | 28,663,262 |
+| Python | リリース | URL | SHA-256 | サイズ |
+|---|---|---|---|---|
+| 3.12 (3.12.10) | 2025-03 | https://github.com/winpython/winpython/releases/download/16.6.20250620final/Winpython64-3.12.10.1dot.zip | `7a1f004aec39615977b2b245423a50115530d16af3418df77977186a555d0a40` | 38,519,826 |
+| 3.13 (3.13.15) | 2026-03 | https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.13.15.0dot.zip | `28e36408f0140c50b207ea059a599c664564e68a3cbb835f03a71f4601efd8f1` | 28,158,845 |
+| 3.14 (3.14.7) | 2026-03 | https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.14.7.0dot.zip | `dbabedfb50eeb3c2c63dc43c9cb6239eae4a582c3bfd9a5f2ffd00a09b49a527` | 28,663,262 |
 
 SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt で一致を確認済み(2026-10-06)。
 
@@ -193,8 +197,14 @@ odekake-winpython\
   - `scripts\env.bat` は、PATH(`python\`, `python\Scripts` 等)、`PYTHONIOENCODING=utf-8`、`HOME` を設定する。
   - 同梱の wppm に、pip のランチャーを移設可能にする処理(`--movable`)がある。console script の .exe が移設に耐える可能性がある。(未検証。本スクリプトはランチャーを使わないので影響なし)
 - PowerShell 5.1 と 7.6.6 は、どちらも既定で STA。フォルダ選択ダイアログを出せる。
+- PS 7 の `PSModulePath` を引き継いだ環境(PS 7 から起動した Git Bash など)から `powershell.exe -File build-offline.ps1` を呼ぶと、5.1 で `Get-FileHash` が見つからずに失敗した。`PSModulePath` を外して呼ぶと成功した(2026-10-06 確認)。PS 7 のターミナルから build-offline.bat を呼んだときも同じになるかは未確認。
 - uv 0.11.16 の `uv export` に次のフラグがある: `--frozen`, `--no-dev`, `--no-emit-project`, `--no-hashes`, `--no-default-groups`, `--group`, `--all-groups`, `--extra`, `--all-extras`, `--format`, `-o/--output-file`。
 - 参照: https://winpython.github.io/ , https://winpython.github.io/releases.html
+- 3.12 は、2026-03 リリース(`17.12.20260522/WinPython`)にはない(3.13.15 / 3.14.7 / 3.15.0 のみ)。3.12 の dot 版がある最後の安定版は 2025-03 リリース(タグ `16.6.20250620final`)で、これより新しいリリースに 3.12 はない(2026-10-06 確認)。
+- 3.12 dot zip(3.12.10)の中身(実物で確認):
+  - 最上位は `WPy64-312101`。`python\python.exe` と `python\Lib\site-packages\` は 3.13 と同じ深さなので、`.pth` の `..\..\..\..\src` はそのまま使える。
+  - `._pth` はない。pip 25.1.1、packaging 25.0、setuptools 79.0.1 を同梱。同梱の pip 25.1.1 で、`uv export` が出すハッシュ付きの requirements を入れられる(試験ビルドで確認)。
+  - 3.13 との違い: `wheelhouse\` がない(prune では「(なし)」になるだけ)。空の `settings\` と `t\` がある(役割が分からないので消さない)。
 - 3.13 dot は packaging 26.2 を同梱している。lock がこれと違う版を指していれば、pip が入れ替える(試験用プロジェクトで 26.3 に入れ替わった)。
 - git pathspec の `:(exclude,glob)` で、`tests` はフォルダごと、`*.log` は最上位だけ、`**/*.log` は全階層に当たる(2026-10-06 確認)。
 
@@ -215,6 +225,7 @@ odekake-winpython\
 
 確認の記録:
 - 2026-10-06 に、試験用の uv プロジェクト(requests に依存)で確認: 5.1 / 7 の両方でビルド成功。成果物を日本語と空白を含む別のパスに展開し、`python -I -c "import <パッケージ>, requests"` が通った。2回目以降は WinPython をダウンロードせずキャッシュを使った。
+- 2026-10-06 に、Python 3.12 の試験用プロジェクト(requests に依存、`.python-version` は `3.12.2`)で確認: 5.1 / 7 の両方でビルド成功(3.12.10 を同梱)。成果物を日本語と空白を含む別のパスに展開し、`python -I -c "import <パッケージ>, requests"` が通った。同じプロジェクトを `-PythonVersion 3.13` / `3.14` でもビルドし、成功した。
 - 2026-10-06 に、ユーザーが実プロジェクトでビルドし、成功・完了ポップアップの表示を確認。
 
 ### 未確認事項・実装時のメモ
