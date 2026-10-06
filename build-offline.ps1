@@ -23,6 +23,7 @@ param(
     [switch]$PruneWinPython,
     [string]$ImportName,
     [string]$Installer,
+    [string]$WinPythonArchiveFormat,
     [switch]$NoPopup
 )
 
@@ -59,17 +60,18 @@ $PruneTargets = @(
 # 設定キーと型。引数名はキーの先頭を大文字にしたもの。
 # 型が配列のキーは、その中の値だけを受け付ける(大文字小文字も区別する)。既定値は先頭の値。
 $SettingTypes = [ordered]@{
-    pythonVersion        = 'string'
-    outputDir            = 'string'
-    trackedOnly          = 'bool'
-    includeExportIgnored = 'bool'
-    groups               = 'array'
-    extras               = 'array'
-    exclude              = 'array'
-    pruneWinPython       = 'bool'
-    importName           = 'string'
-    installer            = @('uv', 'pip')
-    noPopup              = 'bool'
+    pythonVersion          = 'string'
+    outputDir              = 'string'
+    trackedOnly            = 'bool'
+    includeExportIgnored   = 'bool'
+    groups                 = 'array'
+    extras                 = 'array'
+    exclude                = 'array'
+    pruneWinPython         = 'bool'
+    importName             = 'string'
+    installer              = @('uv', 'pip')
+    winPythonArchiveFormat = @('zip', '7z')
+    noPopup                = 'bool'
 }
 
 # pip モードで入れられる index(uv.lock の registry)。これ以外の index の依存があればエラーにする。
@@ -164,9 +166,9 @@ function Invoke-Build {
     if (-not (Test-Path -LiteralPath $outDir -PathType Container)) { throw "出力先フォルダがありません: $outDir" }
     $zipPath = Join-Path $outDir "$name-${version}_$Timestamp.zip"
     Write-Log "出力先: $zipPath"
-    Write-Log ("groups: [{0}] / extras: [{1}] / exclude: [{2}] / trackedOnly: {3} / includeExportIgnored: {4} / pruneWinPython: {5} / installer: {6}" -f
+    Write-Log ("groups: [{0}] / extras: [{1}] / exclude: [{2}] / trackedOnly: {3} / includeExportIgnored: {4} / pruneWinPython: {5} / installer: {6} / winPythonArchiveFormat: {7}" -f
         ($cfg.groups -join ', '), ($cfg.extras -join ', '), ($cfg.exclude -join ', '), $cfg.trackedOnly, $cfg.includeExportIgnored,
-        $cfg.pruneWinPython, $cfg.installer)
+        $cfg.pruneWinPython, $cfg.installer, $cfg.winPythonArchiveFormat)
     Write-Log "uv: $((Invoke-Native uv @('--version') -Capture) -join ' ')"
 
     # --- 作業用フォルダ ---
@@ -176,6 +178,13 @@ function Invoke-Build {
     }
     $stageDir = Join-Path $WorkDir 'stage'
     New-Item -ItemType Directory -Path $stageDir | Out-Null
+
+    # 7z を作れない PC なら、WinPython のダウンロード前に止める(zip へのフォールバックはしない。spec §16)
+    $tar = Get-SystemTarPath
+    if ($cfg.winPythonArchiveFormat -eq '7z') {
+        Assert-SevenZipWritable $tar $WorkDir
+        Write-Log "tar: $((Invoke-Native $tar @('--version') -Capture) -join ' ')"
+    }
 
     # --- 依存の書き出し ---
     # uv モードでも行う。WinPython のダウンロード前に lock の不備に気づくためと、入れる依存をログに残すため。
@@ -270,13 +279,18 @@ function Invoke-Build {
 
     # --- ZIP ---
     Write-Step 'ZIP を作る'
-    $winPythonZip = Join-Path $WorkDir 'winpython.zip'
-    Write-Log "winpython.zip を作成中..."
-    New-ZipFromDirectory $winPythonZip $wpDir
-    Write-Log ("winpython.zip: {0:N1} MB" -f ((Get-Item -LiteralPath $winPythonZip).Length / 1MB))
+    $winPythonArchiveName = "winpython.$($cfg.winPythonArchiveFormat)"
+    $winPythonArchive = Join-Path $WorkDir $winPythonArchiveName
+    Write-Log "$winPythonArchiveName を作成中..."
+    if ($cfg.winPythonArchiveFormat -eq '7z') {
+        New-SevenZipFromDirectory $winPythonArchive $wpDir $tar
+    } else {
+        New-ZipFromDirectory $winPythonArchive $wpDir
+    }
+    Write-Log ("{0}: {1:N1} MB" -f $winPythonArchiveName, ((Get-Item -LiteralPath $winPythonArchive).Length / 1MB))
     Write-Log "外側 ZIP を作成中..."
-    # winpython.zip は中身が zip なので圧縮しない
-    $outerEntries = @(@{ Name = 'winpython.zip'; Source = $winPythonZip; Store = $true })
+    # winpython.zip / winpython.7z は圧縮済みなので、外側では圧縮しない
+    $outerEntries = @(@{ Name = $winPythonArchiveName; Source = $winPythonArchive; Store = $true })
     foreach ($rel in $files) {
         $outerEntries += @{ Name = $rel; Source = (Join-Path $stageDir ($rel -replace '/', '\')); Store = $false }
     }

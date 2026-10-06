@@ -48,6 +48,7 @@ build-offline.bat -ProjectRoot D:\work\myproject
 | `-PythonVersion 3.13` | Python のバージョンを指定(`.python-version` より優先) |
 | `-ImportName <名前>` | 動作確認で import するパッケージ名(既定は pyproject の name) |
 | `-Installer uv` / `-Installer pip` | 依存を入れる方法(既定は `uv`。下の「依存のインストール方法」を参照) |
+| `-WinPythonArchiveFormat zip` / `-WinPythonArchiveFormat 7z` | WinPython を入れるアーカイブの形式(既定は `zip`。下の「WinPython のアーカイブ形式」を参照) |
 | `-NoPopup` | 終了時のポップアップを出さない |
 
 ### 設定ファイル
@@ -84,6 +85,21 @@ uv で問題が出たときは、従来の pip でも入れられます。
 
 pip では、PyPI 以外の index にあるパッケージは入りません。そうした依存があると、WinPython をダウンロードする前にエラーで止まります。
 どちらの方法でも、依存の一覧は `uv export` で uv.lock から書き出し、ログに残します。
+
+### WinPython のアーカイブ形式
+
+既定では、WinPython を `winpython.zip` にして外側の ZIP に入れます。
+`"winPythonArchiveFormat": "7z"` にすると、代わりに `winpython.7z` を入れます。zip より 4 割ほど小さくなります。
+
+```json
+{
+  "winPythonArchiveFormat": "7z"
+}
+```
+
+- 7z は Windows 標準の `C:\Windows\System32\tar.exe` で作ります。7-Zip は要りません。
+- この PC の `tar.exe` が 7z を作れないとき(古い Windows など)は、WinPython をダウンロードする前にエラーで止まります。zip に切り替わることはありません。
+- 持ち出し先で 7z を展開する手段(7-Zip など)が要ります。`Expand-Archive` では展開できません(下の「持ち出し先での準備」を参照)。
 
 ### WinPython の不要なファイルの削除
 
@@ -122,7 +138,7 @@ odekake-winpython\
 
 ```
 myproject-1.0.0_20261006T120000.zip
-├─ winpython.zip   ← WinPython と依存ライブラリ
+├─ winpython.zip   ← WinPython と依存ライブラリ(7z を選んだときは winpython.7z)
 ├─ src\            ← 自分のコード
 └─ (その他、gitignore されていないファイル。`.gitattributes` で export-ignore のものを除く)
 ```
@@ -133,6 +149,12 @@ SHA-256 は ZIP には入りません。画面・ポップアップ・ログ(`lo
 
 1. 外側の ZIP を、好きなフォルダ(例: `D:\apps\myproject\`)に展開します。
 2. その中の `winpython.zip` を、同じフォルダの `winpython\` に展開します(フォルダ名は小文字の `winpython`)。
+   - `winpython.7z` のときは、7-Zip で展開するか、次のように Windows 標準の `tar.exe` で展開します(Windows 10 や古いビルドの `tar.exe` では展開できないことがあります)。
+
+     ```powershell
+     mkdir winpython
+     tar.exe -C winpython -xf winpython.7z
+     ```
 
 ```
 D:\apps\myproject\

@@ -116,8 +116,8 @@ function Get-ProjectFiles([string]$Root, [bool]$TrackedOnlyFlag, [string[]]$Excl
             Write-Log "除外(export-ignore): $rel"
             continue
         }
-        if ($rel -eq 'winpython.zip' -or $rel -like 'winpython/*') {
-            throw "対象プロジェクトに '$rel' があり、成果物の winpython.zip / winpython\ と衝突します。exclude で除外してください。"
+        if ($rel -eq 'winpython.zip' -or $rel -eq 'winpython.7z' -or $rel -like 'winpython/*') {
+            throw "対象プロジェクトに '$rel' があり、成果物の winpython.zip / winpython.7z / winpython\ と衝突します。exclude で除外してください。"
         }
         $files.Add($rel)
     }

@@ -24,7 +24,7 @@
 
 ```
 <name>-<version>_yyyymmddTHHmmss.zip      ← 外側 ZIP(持ち出し申請の対象。1ファイル)
-├─ winpython.zip   ← WinPython + 依存ライブラリ。自分のコードは含まない
+├─ winpython.zip   ← WinPython + 依存ライブラリ。自分のコードは含まない(winPythonArchiveFormat が 7z なら winpython.7z。§16)
 ├─ src\            ← 自分のコード(ファイルのまま。搬入先で編集する可能性あり)
 ├─ pages\
 └─ (その他、対象プロジェクトの gitignore されていないファイル。export-ignore のものを除く)
@@ -32,7 +32,7 @@
 
 - **winpython.zip を二重にする理由**: ファイル数の多いランタイムを1ファイルで運ぶため。依存が近い別プロジェクトで流用する可能性もある。
 - **winpython.zip の中身**: WinPython 配布物の最上位フォルダ(`WPy64-313150` などバージョン由来の名前)を取り除いて詰め直す。展開すると直接 `python\`, `scripts\` ... が出てくる。
-- **搬入先での規約**: winpython.zip は `<project>\winpython\` に展開する。フォルダ名は小文字の `winpython`。
+- **搬入先での規約**: winpython.zip(または winpython.7z)は `<project>\winpython\` に展開する。フォルダ名は小文字の `winpython`。
   - `.venv` という名前は使わない。uv が壊れた venv とみなして作り直す恐れがある。(推測)
 - **自分のコードの import**:
   - 対象プロジェクトは `[build-system]`(hatchling 等)を持ち、開発時は uv が自分のコードを editable インストールしている前提。
@@ -80,7 +80,7 @@
    - `python -m pip check`
    - `python -c "import <importName>"`(`.pth` の検証も兼ねる)
 10. `pruneWinPython` が有効なら、不要なランチャー等を削除する(§8)。
-11. winpython.zip を作る。対象プロジェクトのファイルを集め、外側 ZIP を作る。
+11. winpython.zip(または winpython.7z。§16)を作る。対象プロジェクトのファイルを集め、外側 ZIP を作る。
 12. 外側 ZIP の SHA-256 を計算し、画面とログに出す。
 13. 結果をポップアップで表示する(§9)。
 
@@ -152,6 +152,7 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
 | `pruneWinPython` | `-PruneWinPython` | 真偽値 | false(`config\settings.json` で true にしている) |
 | `importName` | `-ImportName` | 文字列 | pyproject の `name`(`-` → `_`) |
 | `installer` | `-Installer` | `"uv"` / `"pip"` | `"uv"`。依存を入れる方法(§15)。ほかの値はエラー(大文字小文字も区別する) |
+| `winPythonArchiveFormat` | `-WinPythonArchiveFormat` | `"zip"` / `"7z"` | `"zip"`。外側 ZIP に入れる WinPython のアーカイブの形式(§16)。ほかの値はエラー(大文字小文字も区別する) |
 | `noPopup` | `-NoPopup` | 真偽値 | false |
 
 - `projectRoot` と `configPath` は設定キーにしない。設定ファイルの場所がそれらで決まるため。
@@ -265,9 +266,9 @@ spec に書かれていなかったため、実装時に決めたもの。変更
 - pyproject.toml は正規表現で読む(PowerShell に TOML パーサーがないため)。`[project]` の `name` / `version` が1行の文字列で書かれている前提。
 - 動作確認の import は `python -I`(カレントフォルダを sys.path に入れない)で行い、`.pth` を経由して import できることを確かめる。
 - ビルド中は、子プロセスの環境変数 `PYTHONPATH`, `PYTHONHOME`, `VIRTUAL_ENV` 等を外し、`PYTHONNOUSERSITE=1` にする。開発環境の影響を受けないため。
-- 外側 ZIP 内で `winpython.zip` は無圧縮で格納する(中身が zip のため)。
+- 外側 ZIP 内で `winpython.zip` / `winpython.7z` は無圧縮で格納する(圧縮済みのため)。
 - ZIP は `ZipArchive` でエントリを1つずつ追加して作り、区切りは必ず `/` にする。PS 5.1(.NET Framework)の `ZipFile.CreateFromDirectory` は区切りに `\` を使い、ZIP の規格に反するため使わない(2026-10-06、実プロジェクトの成果物で判明)。空フォルダも入れる。
-- 対象プロジェクトに `winpython.zip` や `winpython\` があると成果物と衝突するので、エラーにする。
+- 対象プロジェクトに `winpython.zip`、`winpython.7z`、`winpython\` があると成果物と衝突するので、エラーにする(どの形式を選んでも、3つとも)。
 
 ## 14. build-offline.ps1 の分割と単体テスト
 
@@ -287,7 +288,7 @@ odekake-winpython\
 │  ├─ Settings.ps1          ← Resolve-FullPath, Get-SettingKind, Assert-SettingChoice, Read-SettingsFile, Get-EffectiveSettings
 │  ├─ Project.ps1           ← Read-PyProject, Get-ProjectVersion, Get-PythonMinor, Get-ProjectFiles, Get-NonPyPIRequirements(§15)
 │  ├─ WinPython.ps1         ← Get-Sha256, Get-WinPythonArchive, Expand-WinPython
-│  ├─ Zip.ps1               ← New-ZipFile, New-ZipFromDirectory
+│  ├─ Zip.ps1               ← New-ZipFile, New-ZipFromDirectory, Get-SystemTarPath, New-SevenZipFromDirectory, Assert-SevenZipWritable(§16)
 │  └─ Gui.ps1               ← New-TopMostOwner, Select-ProjectFolder, Show-Popup, Get-DownloadsFolder
 └─ tests\
    ├─ Settings.Tests.ps1
@@ -400,3 +401,44 @@ uv sync --project <対象> --frozen --inexact --no-install-project --no-default-
 - 対象プロジェクトには `.venv` などのファイルは作られず、`git status --ignored` も空のままだった。
 - uv モードで入れたパッケージの `INSTALLER` は `uv`。搬入先の pip(26.2.1)で `pip uninstall` できた。
 - 実プロジェクトでのビルドの確認(ユーザー)は未実施。
+
+## 16. WinPython のアーカイブ形式(winPythonArchiveFormat)
+
+issue #13。外側 ZIP の中に入れる WinPython のアーカイブを、zip か 7z から選べるようにした。外側は zip のまま。
+
+### 方式(確定、2026-10-06)
+- 既定は zip(従来どおり `winpython.zip`)。`"7z"` にすると `winpython.7z` を入れる。
+  - 既定を zip にした理由: PowerShell の `Expand-Archive` は 7z を扱えず、搬入先が Windows 10 や古いビルドだと 7-Zip が要るため。
+- 7z は Windows 標準の `%SystemRoot%\System32\tar.exe`(bsdtar / libarchive)で作る: `tar.exe -C <winpython> --format 7zip --options 7zip:compression=lzma2 -cf winpython.7z <最上位の項目...>`
+  - パスは System32 に固定する。PATH の `tar` は Git for Windows の GNU tar 1.35 のことがあり、これは 7z を書けない(`7zip: Invalid archive format`)。
+  - tar に `.` を渡すとエントリ名が `./` で始まるので、最上位の項目を名前で並べて渡す。
+  - 7-Zip(`7z.exe`)は使わない。追加の導入が要らないことを優先した。7-Zip 製より約 4% 大きくなる(下の比較)ことは承知のうえ。
+- 圧縮は LZMA2、レベルは libarchive の既定。solid(1 ブロック)になる。
+- 7z を作れないときは、zip にフォールバックせずエラーで止める。WinPython のダウンロード前に、作業用フォルダで小さな 7z を試しに作って確かめる(`Assert-SevenZipWritable`)。ログに `tar --version` を出す。
+- 外側 ZIP の中では無圧縮で格納する(§13)。
+
+### 搬入先での展開
+- 7-Zip、または `tar.exe -C winpython -xf winpython.7z`(先に `winpython\` を作る)で展開する。
+- Windows 11 の新しいビルドのエクスプローラーは 7z を展開できるはず。(未確認)
+- Windows 10 や古いビルドの `tar.exe` は 7z(LZMA2)を書けない・読めない可能性がある。(推測。未確認)
+
+### 確認の記録(2026-10-06、Windows 11 26200、tar.exe は bsdtar 3.8.8 / libarchive 3.8.8 / liblzma 5.8.1)
+- WinPython 3.13.15 dot 単体(依存なし、prune 前、4323 ファイル)の比較:
+
+| 作り方 | サイズ | 時間 |
+|---|---|---|
+| 元の配布 zip | 28.2 MB | — |
+| `Compress-Archive` の zip | 28.0 MB | 約 5 秒 |
+| tar.exe 7z(lzma2、既定レベル) | 17.5 MB | 18〜40 秒(測るたびにばらついた) |
+| tar.exe 7z(lzma2、レベル 9) | 17.0 MB | 約 21 秒 |
+| 7-Zip 26.04 `7zr -mx=5`(既定) | 16.9 MB | 約 10 秒 |
+| 7-Zip 26.04 `7zr -mx=9` | 16.5 MB | 約 12 秒 |
+
+- 7-Zip との差は、7-Zip が exe/dll 向けの BCJ フィルタと大きな辞書を使うためと思われる。(推測)
+- tar.exe で作った 7z は、7-Zip 26.04 の `7zr t` で異常なし。`7zr x` と `tar.exe -xf` のどちらで展開しても、ファイル数が元と一致し、`python.exe` が動いた。7-Zip から見ると `LZMA2:23`、solid、1 ブロック。
+- 試験用プロジェクト(3.13、requests に依存、uv モード、prune あり)のビルド:
+  - `-WinPythonArchiveFormat 7z`: PS 7 / 5.1(.bat 経由)の両方で成功。winpython.7z は 16.9 MB(既定の zip のビルドでは winpython.zip が 26.7 MB)。
+  - 既定(zip): PS 5.1 で成功し、従来どおり `winpython.zip` が入った。
+  - `-WinPythonArchiveFormat 7Z` は、設定の値のエラーで止まった。
+- 成果物を日本語と空白を含むパスに展開し(外側は `Expand-Archive`、winpython.7z は `tar.exe -xf` と 7-Zip の両方)、`python -I -c "import <パッケージ>, requests, pip"` が通った(PS 7 / 5.1)。
+- `tar -tf` の一覧はコンソールのコードページで出力されるので、日本語の名前が化けて見える。7z の中には UTF-16 で入っており、展開すれば正しい名前になる。
