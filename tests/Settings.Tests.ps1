@@ -114,6 +114,13 @@ Describe 'Get-EffectiveSettings' {
             Should -Throw "*設定 'winPythonArchiveFormat' は `"zip`" / `"7z`" のどれかにしてください(引数 -WinPythonArchiveFormat)*"
     }
 
+    It 'initialDir は既定で空、settings.local.json で指定できる' {
+        $root = Join-Path $TestDrive 'none'
+        (Get-EffectiveSettings @{} $SettingTypes $root).initialDir | Should -BeNullOrEmpty
+        $root = New-ConfigDir (Join-Path $TestDrive 'initialdir') $null '{ "initialDir": "%USERPROFILE%\\repos" }'
+        (Get-EffectiveSettings @{} $SettingTypes $root).initialDir | Should -BeExactly '%USERPROFILE%\repos'
+    }
+
     It '-ConfigPath のファイルがないとエラー' {
         $missing = Join-Path $TestDrive 'missing\settings.json'
         { Get-EffectiveSettings @{ ConfigPath = $missing } $SettingTypes $TestDrive } |
