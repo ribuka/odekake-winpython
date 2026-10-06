@@ -148,6 +148,7 @@ function Get-ExportIgnoredPaths([string]$Root, [string[]]$Paths) {
     $flush = {
         $out = Invoke-Native git (@('-C', $Root, 'check-attr', '-z', 'export-ignore', '--') + $chunk.ToArray()) -Capture
         # 出力は「パス NUL 属性名 NUL 値 NUL」の繰り返し。値が set のものだけ除く(git archive と同じ)。
+        # 文字列値の export-ignore=set も set と出力されるので区別できず、除いてしまう(既知の制限。spec §2)。
         $fields = ($out -join "`n") -split "`0"
         for ($j = 0; $j + 2 -lt $fields.Count; $j += 3) {
             if ($fields[$j + 2] -eq 'set') { [void]$set.Add($fields[$j]) }
