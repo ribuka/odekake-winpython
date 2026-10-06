@@ -163,7 +163,7 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
   - 環境変数(`%USERPROFILE%` など)は展開する。
   - 相対パスはエラーにする(.bat から起動すると基準が分かりにくいため)。展開できなかった環境変数が残って相対パスになった場合も同じ。
   - フォルダがなければ、ログに警告を出し、初期位置を指定せずにダイアログを開く。
-  - ダイアログには、`InitialDirectory` があれば(.NET 8 以降、PS 7)それを、なければ(.NET Framework、PS 5.1)`SelectedPath` を設定する。PS 7 で `SelectedPath` を使うと、指定したフォルダではなく親フォルダが開く(.NET の実装による。推測、目視は未確認)。PS 5.1 はツリーがそのフォルダまで展開される。
+  - ダイアログには、`InitialDirectory` があれば(.NET 8 以降、PS 7)それを、なければ(.NET Framework、PS 5.1)`SelectedPath` を設定する。PS 7 で `SelectedPath` を使うと、指定したフォルダではなく親フォルダが開く(WinForms のソース `FolderBrowserDialog.cs` で確認。目視は未確認)。PS 5.1 はツリーがそのフォルダまで展開される。
 - `exclude` は git pathspec(glob)の書式で書き、`:(exclude,glob)<パターン>` として git に渡す。対象プロジェクトの最上位からの相対パスで書く。(確定)
   - 例: `docs/**`, `**/*.log`, `tests`(フォルダごと)。
   - .gitignore と違い、`*.log` は最上位のファイルにしか当たらない。どの階層にも当てるなら `**/*.log`。
