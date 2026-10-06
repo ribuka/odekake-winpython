@@ -18,6 +18,7 @@ A general-purpose PowerShell script that packages any uv project into a ZIP, bas
 
 - The script must work on both Windows PowerShell 5.1 and PowerShell 7.
 - Run `Invoke-Pester tests` after changing `lib/*.ps1`, and add or update tests for the changed behavior. The tests must not require network access.
+- Write user-facing text (log output, console messages, exception messages, GUI text), code comments, script help, and Pester `Context` / `It` names in English.
 - `README.md`, `docs/spec.md`, and `docs/issues.md` are written in Japanese. Keep them in Japanese.
 
 ## Working with the spec
