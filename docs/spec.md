@@ -62,9 +62,13 @@
 3. pyproject.toml から name と version を読む(§6)。Python バージョンを決める(§5)。
 4. 依存を書き出す: `uv export --frozen --no-emit-project --no-default-groups [--group X ...] [--extra Y ...] --format requirements-txt -o <tmp>`
    - pyproject の `default-groups` は無視し、`groups` に指定したものだけを含める。既定では dev も含めない。
+   - `installer` が uv でも行う。WinPython のダウンロード前に lock の不備に気づくためと、入れる依存をログに残すため(ハッシュの行は省いてログに書く)。(確定、2026-10-06)
+   - `installer` が pip のときは、ここで PyPI 以外の index から取る依存がないかを確かめ、あればエラーで止める(§15)。
 5. WinPython を用意する: `.build\` にキャッシュする。期待 SHA-256 と一致しなければ、自動でダウンロードし直す。`-Force` は設けない。
 6. `.build\` の作業用フォルダに、搬入先と同じ配置(`<project>\winpython\` + `src\` …)で組み立てる。
-7. `winpython\python\python.exe -m pip install -r <tmp>` を実行する。host の pip や PATH には頼らない。
+7. 依存を WinPython に入れる。方法は `installer`(§8、§15)で選ぶ。
+   - uv(既定): `UV_PROJECT_ENVIRONMENT=<winpython\python>` にして `uv sync --frozen --inexact --no-install-project --no-default-groups [--group X ...] [--extra Y ...] --python <winpython\python\python.exe> --link-mode copy --no-editable` を実行する。
+   - pip: `winpython\python\python.exe -m pip install -r <tmp>` を実行する。host の pip には頼らない。
 8. `.pth` を置く。
 9. 動作確認(毎回実行し、失敗したらビルドも失敗):
    - `python --version`
@@ -141,6 +145,7 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
 | `exclude` | `-Exclude` | 文字列の配列 | 空。外側 ZIP から除外するパターン |
 | `pruneWinPython` | `-PruneWinPython` | 真偽値 | false(`config\settings.json` で true にしている) |
 | `importName` | `-ImportName` | 文字列 | pyproject の `name`(`-` → `_`) |
+| `installer` | `-Installer` | `"uv"` / `"pip"` | `"uv"`。依存を入れる方法(§15)。ほかの値はエラー(大文字小文字も区別する) |
 | `noPopup` | `-NoPopup` | 真偽値 | false |
 
 - `projectRoot` と `configPath` は設定キーにしない。設定ファイルの場所がそれらで決まるため。
@@ -218,7 +223,7 @@ odekake-winpython\
 1. コマンド1つ(または build-offline.bat のダブルクリック)で、対象プロジェクトから ZIP を作れる。— 確認済み(試験用プロジェクト・実プロジェクト)
 2. 対象プロジェクトの既存の .venv に依存しない。— 確認済み(子プロセスの環境変数を外し、WinPython の python.exe だけを使う。§13)
 3. 同梱する Python 実行環境は WinPython である。— 確認済み
-4. 依存は uv.lock の固定された状態から入れる。— 確認済み(`uv export --frozen`)
+4. 依存は uv.lock の固定された状態から入れる。— 確認済み(`uv export --frozen`、uv モードは `uv sync --frozen`)
 5. ビルドの失敗が、はっきり分かる。— 確認済み(ポップアップ、ログ、終了コード)
 6. 成果物を別の Windows PC にコピーできる(1ファイル)。— 確認済み
 7. インターネットもシステムの Python もない PC で展開し、同梱の WinPython で対象のコードを import できる。別の展開先パス(日本語・空白を含む)でも動く。— 別パスは確認済み。インターネットも Python もない PC では未確認
@@ -268,8 +273,8 @@ odekake-winpython\
 ├─ build-offline.bat        ← 変更なし
 ├─ lib\
 │  ├─ Log.ps1               ← Write-Log, Write-Step, Open-LogFile, Invoke-Native
-│  ├─ Settings.ps1          ← Resolve-FullPath, Read-SettingsFile, Get-EffectiveSettings
-│  ├─ Project.ps1           ← Read-PyProject, Get-ProjectVersion, Get-PythonMinor, Get-ProjectFiles
+│  ├─ Settings.ps1          ← Resolve-FullPath, Get-SettingKind, Assert-SettingChoice, Read-SettingsFile, Get-EffectiveSettings
+│  ├─ Project.ps1           ← Read-PyProject, Get-ProjectVersion, Get-PythonMinor, Get-ProjectFiles, Get-NonPyPIRequirements(§15)
 │  ├─ WinPython.ps1         ← Get-Sha256, Get-WinPythonArchive, Expand-WinPython
 │  ├─ Zip.ps1               ← New-ZipFile, New-ZipFromDirectory
 │  └─ Gui.ps1               ← New-TopMostOwner, Select-ProjectFolder, Show-Popup, Get-DownloadsFolder
@@ -335,3 +340,52 @@ odekake-winpython\
 - 分割の前後で、試験用 uv プロジェクトに対するビルドが PS 5.1 と 7 の両方で成功し、ログの内容(時刻とパス以外)と、外側 ZIP・winpython.zip のエントリ一覧が一致する。
 - エラー系(git でない、未知のキー、未対応の Python、VERSION なし)のメッセージが変わらない。
 - `Invoke-Pester tests` が PS 5.1 と 7 の両方で通る。ネットワークにつながっていなくても通る。
+
+## 15. 依存のインストール方式(installer)
+
+issue #10。`[tool.uv.sources]` で独自の index(`explicit = true`)を指定した非公開パッケージが依存にあると、pip 方式のビルドが失敗していた。
+
+### 原因(2026-10-06、ローカルの擬似 index で再現。uv 0.11.16 / WinPython 3.13.15 dot)
+- `uv export --format requirements-txt` は index の情報を出さない(`mylib==0.1.0 --hash=...` だけ)。pip は PyPI だけを探し、`No matching distribution found` で失敗する。
+- PyPI に同名のパッケージがあっても、ハッシュが合わないので誤って入ることはない。ハッシュは外さない。
+- 実プロジェクトの失敗ログは未確認。同じ原因というのは推測。
+
+### 方式(確定)
+- `uv sync` で WinPython の python フォルダに直接入れる方式(uv モード)を足し、既定にする。普段の `uv sync` と同じ認証の仕組み(`UV_INDEX_<NAME>_USERNAME/PASSWORD`、keyring、netrc、`uv auth` など)がそのまま効くため。
+- `config\settings.json` にも `"installer": "uv"` を書き、切り替えられることが目に入るようにする。
+- 従来の pip 方式も `installer: "pip"` で残す。uv モードで問題が出たときの逃げ道。pip モードでも `uv export` を使うので、uv への依存はなくならない。
+- 検討して採らなかった方式: `uv export --format pylock.toml` → `pip install -r pylock.toml`(pip が experimental の警告を出す。3.12 の pip 25.1.1 は未検証)、requirements.txt + `--extra-index-url`(認証情報を pip 用に別に用意する必要があり、汎用スクリプトに向かない)。
+
+### uv モードの引数(確定、2026-10-06)
+`UV_PROJECT_ENVIRONMENT=<winpython\python>` にして、次を実行する。環境変数は呼び出しの間だけ設定し、元に戻す。
+```
+uv sync --project <対象> --frozen --inexact --no-install-project --no-default-groups [--group X ...] [--extra Y ...]
+        --python <winpython\python\python.exe> --link-mode copy --no-editable
+```
+- `--inexact`: 付けないと、lock にないもの(WinPython 同梱の pip、wppm、packaging、setuptools 等)が消される。
+- `--link-mode copy`: uv のキャッシュへのハードリンクにせず、実体をコピーする。成果物がキャッシュと結びつかないため。
+- `--no-editable`: path 依存やワークスペースのメンバーを、開発機の絶対パスを指す editable にしないため。
+- `--compile-bytecode` は付けない(見送り)。
+- 個人の uv 設定(`uv.toml`、`UV_*` 環境変数)は外さない(`--no-config` は付けない)。index の認証に効いてほしいため。その分、成果物が個人の設定に左右されうる。
+- ログに `uv --version` を出す。uv sync には `-v` を付けない(入れたパッケージの一覧は通常の出力に出る)。
+
+### pip モードの事前検査(確定、2026-10-06)
+- `uv export` の直後(WinPython のダウンロード前)に、requirements.txt の各依存(`name==version`)を uv.lock の `[[package]]` と照合する。`source = { registry = "..." }` が `https://pypi.org/simple` 以外なら、該当する依存を並べてエラーにする(`Get-NonPyPIRequirements`)。
+- 環境マーカーで index を切り替えると、uv.lock に同じ `name==version` が registry 違いで複数入る。requirements.txt からはどれが選ばれたか分からないため、1つでも PyPI 以外があればエラーにする(安全側。Windows 以外向けの非公開 index でも止まる)。(PR #11 のレビューで判明)
+- requirements.txt に出ない依存(選ばなかった group など)は見ない。名前は PEP 503 の正規化(`[-_.]+` → `-`、小文字)で照合する。URL の末尾の `/` は区別しない。
+- pyproject の `[[tool.uv.index]]` は正規表現で確実に読めない恐れがあるため、uv.lock を見る。
+- PyPI のミラーを既定の index にしている環境(`UV_DEFAULT_INDEX` など)では、PyPI のパッケージでもエラーになる。(推測。未検証) その場合は uv モードを使う。
+
+### 設定の型
+- 決まった値だけを受け付ける型を足した。`$SettingTypes` の値を配列にすると、その中の値だけを受け付け、先頭の値が既定値になる。設定ファイルと引数の両方で、大文字小文字も区別して確かめる(未知のキーと同じ扱い)。
+
+### 確認の記録(2026-10-06、uv 0.11.16)
+- 擬似の非公開 index(`python -m http.server` で配った PEP 503 の simple index。`explicit = true`)にだけある `mylib` と requests に依存する 3.13 の試験用プロジェクト:
+  - uv モード: PS 5.1 / 7 の両方でビルド成功。
+  - pip モード: PS 5.1 / 7 の両方で、WinPython のダウンロード前に「PyPI 以外の index から取る依存があり…」のエラーで止まった。
+- PyPI だけの試験用プロジェクト(3.12(`.python-version` は `3.12.2`)/ 3.13、requests に依存): uv / pip の両モード × PS 5.1 / 7 の全8通りでビルド成功。
+- 上の成功した成果物すべてを、日本語と空白を含むパスに展開し、`python -I -c "import <パッケージ>, requests, pip, packaging"`(非公開のものは `mylib` も)が通った。
+- uv モードの成果物で、元の WinPython の `site-packages` 直下の項目(3.13: 21 個、3.12: 24 個)がすべて残っていた。
+- 対象プロジェクトには `.venv` などのファイルは作られず、`git status --ignored` も空のままだった。
+- uv モードで入れたパッケージの `INSTALLER` は `uv`。搬入先の pip(26.2.1)で `pip uninstall` できた。
+- 実プロジェクトでのビルドの確認(ユーザー)は未実施。

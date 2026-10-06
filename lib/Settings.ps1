@@ -5,8 +5,22 @@ function Resolve-FullPath([string]$Path) {
     return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
 }
 
+# $SettingTypes の値から型名を返す。値が配列なら、決まった値だけを受け付ける 'choice'。
+function Get-SettingKind($Type) {
+    if ($Type -is [array]) { return 'choice' }
+    return $Type
+}
+
+# choice の値を確かめる。大文字小文字も区別する(未知のキーと同じ扱い)。
+function Assert-SettingChoice([string]$Key, $Value, [string[]]$Choices, [string]$Source) {
+    if ($Value -isnot [string] -or -not ($Choices -ccontains $Value)) {
+        $list = ($Choices | ForEach-Object { '"' + $_ + '"' }) -join ' / '
+        throw "設定 '$Key' は $list のどれかにしてください($Source): '$Value'"
+    }
+}
+
 # 設定ファイルを読み、型を確認して hashtable で返す。ファイルがなければ空。
-# $SettingTypes は キー → 'string' / 'bool' / 'array' の辞書(build-offline.ps1 の固定値)。
+# $SettingTypes は キー → 'string' / 'bool' / 'array' / 値の配列(choice) の辞書(build-offline.ps1 の固定値)。
 function Read-SettingsFile([string]$Path, [System.Collections.IDictionary]$SettingTypes) {
     $result = @{}
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $result }
@@ -27,7 +41,8 @@ function Read-SettingsFile([string]$Path, [System.Collections.IDictionary]$Setti
             throw "設定ファイルに未知のキー '$key' があります: $Path`n使えるキー: $($SettingTypes.Keys -join ', ')"
         }
         $value = $prop.Value
-        switch ($SettingTypes[$key]) {
+        switch (Get-SettingKind $SettingTypes[$key]) {
+            'choice' { Assert-SettingChoice $key $value $SettingTypes[$key] $Path }
             'string' {
                 if ($value -isnot [string]) { throw "設定 '$key' は文字列にしてください: $Path" }
             }
@@ -53,7 +68,8 @@ function Read-SettingsFile([string]$Path, [System.Collections.IDictionary]$Setti
 function Get-EffectiveSettings([hashtable]$BoundParameters, [System.Collections.IDictionary]$SettingTypes, [string]$RepoRoot) {
     $settings = @{}
     foreach ($key in $SettingTypes.Keys) {
-        switch ($SettingTypes[$key]) {
+        switch (Get-SettingKind $SettingTypes[$key]) {
+            'choice' { $settings[$key] = $SettingTypes[$key][0] }
             'string' { $settings[$key] = $null }
             'bool'   { $settings[$key] = $false }
             'array'  { $settings[$key] = [string[]]@() }
@@ -81,7 +97,8 @@ function Get-EffectiveSettings([hashtable]$BoundParameters, [System.Collections.
         # pythonVersion は .python-version との間に優先順位があるので、ここでは引数で上書きしない(Get-PythonMinor)
         if ($key -eq 'pythonVersion') { continue }
         $value = $BoundParameters[$paramName]
-        switch ($SettingTypes[$key]) {
+        switch (Get-SettingKind $SettingTypes[$key]) {
+            'choice' { Assert-SettingChoice $key $value $SettingTypes[$key] "引数 -$paramName" }
             'bool' { $value = [bool]$value }
             'array' {
                 # .bat 経由(-File)だと -Groups a,b が1つの文字列で届くので、カンマで分ける

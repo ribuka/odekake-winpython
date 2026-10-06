@@ -46,6 +46,7 @@ build-offline.bat -ProjectRoot D:\work\myproject
 | `-TrackedOnly` | git に add 済みのファイルだけを入れる |
 | `-PythonVersion 3.13` | Python のバージョンを指定(`.python-version` より優先) |
 | `-ImportName <名前>` | 動作確認で import するパッケージ名(既定は pyproject の name) |
+| `-Installer uv` / `-Installer pip` | 依存を入れる方法(既定は `uv`。下の「依存のインストール方法」を参照) |
 | `-NoPopup` | 終了時のポップアップを出さない |
 
 ### 設定ファイル
@@ -65,6 +66,23 @@ build-offline.bat -ProjectRoot D:\work\myproject
 ```
 
 優先順位は「オプション > settings.local.json > settings.json > 既定値」です。
+
+### 依存のインストール方法
+
+既定では、`uv sync` で WinPython に依存を入れます(`"installer": "uv"`)。
+`[tool.uv.sources]` と `[[tool.uv.index]]`(`explicit = true`)で指定した非公開の index にあるパッケージも入ります。
+index の認証は、普段の `uv sync` と同じもの(`UV_INDEX_<NAME>_USERNAME` などの環境変数、keyring、`uv auth` など)を使います。
+
+uv で問題が出たときは、従来の pip でも入れられます。
+
+```json
+{
+  "installer": "pip"
+}
+```
+
+pip では、PyPI 以外の index にあるパッケージは入りません。そうした依存があると、WinPython をダウンロードする前にエラーで止まります。
+どちらの方法でも、依存の一覧は `uv export` で uv.lock から書き出し、ログに残します。
 
 ### WinPython の不要なファイルの削除
 
