@@ -15,13 +15,39 @@ function New-TopMostOwner {
     return $owner
 }
 
-function Select-ProjectFolder {
+# 設定 initialDir の値を、フォルダ選択ダイアログの初期位置にするパスへ直す(spec §8)。
+# 未指定(空)なら $null。環境変数(%USERPROFILE% など)は展開する。
+# 相対パスはエラー(.bat から起動すると基準が分かりにくいため)。存在しなければ警告して $null。
+function Resolve-InitialDir([string]$Value) {
+    if (-not $Value) { return $null }
+    $path = [Environment]::ExpandEnvironmentVariables($Value)
+    if ($path -notmatch '^([A-Za-z]:[\\/]|\\\\)') {
+        throw "設定 'initialDir' は絶対パス(C:\... または \\server\...)にしてください: '$Value'"
+    }
+    if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+        Write-Log "設定 'initialDir' のフォルダがないので、初期位置を指定せずにダイアログを開きます: $path" -Color Yellow
+        return $null
+    }
+    return [System.IO.Path]::GetFullPath($path)
+}
+
+# $InitialDir があれば、その中を開いた状態でダイアログを出す。
+function Select-ProjectFolder([string]$InitialDir) {
     $owner = New-TopMostOwner
     try {
         $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
         $dialog.Description = '持ち出す uv プロジェクトのフォルダ(pyproject.toml があるフォルダ)を選んでください'
         $dialog.ShowNewFolderButton = $false
         if ($dialog.PSObject.Properties['UseDescriptionForTitle']) { $dialog.UseDescriptionForTitle = $true }
+        if ($InitialDir) {
+            # .NET 8 以降(PS 7)は InitialDirectory がある。SelectedPath だと親フォルダが開くため、こちらを優先する。
+            # .NET Framework(PS 5.1)は SelectedPath だけ。ツリーがそのフォルダまで展開される。
+            if ($dialog.PSObject.Properties['InitialDirectory']) {
+                $dialog.InitialDirectory = $InitialDir
+            } else {
+                $dialog.SelectedPath = $InitialDir
+            }
+        }
         if ($dialog.ShowDialog($owner) -ne [System.Windows.Forms.DialogResult]::OK) { return $null }
         return $dialog.SelectedPath
     } finally {

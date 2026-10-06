@@ -69,6 +69,16 @@ build-offline.bat -ProjectRoot D:\work\myproject
 
 優先順位は「オプション > settings.local.json > settings.json > 既定値」です。
 
+フォルダ選択ダイアログの初期位置は、`initialDir` で指定できます(オプションはありません)。
+個人のパスなので `config\settings.local.json` に書きます。`%USERPROFILE%` などの環境変数が使えます。
+絶対パスで書いてください。フォルダがないときは、警告を出して初期位置なしでダイアログを開きます。
+
+```json
+{
+  "initialDir": "%USERPROFILE%\\repos"
+}
+```
+
 ### 依存のインストール方法
 
 既定では、`uv sync` で WinPython に依存を入れます(`"installer": "uv"`)。

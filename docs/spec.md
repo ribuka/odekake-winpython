@@ -154,8 +154,16 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
 | `installer` | `-Installer` | `"uv"` / `"pip"` | `"uv"`。依存を入れる方法(§15)。ほかの値はエラー(大文字小文字も区別する) |
 | `winPythonArchiveFormat` | `-WinPythonArchiveFormat` | `"zip"` / `"7z"` | `"zip"`。外側 ZIP に入れる WinPython のアーカイブの形式(§16)。ほかの値はエラー(大文字小文字も区別する) |
 | `noPopup` | `-NoPopup` | 真偽値 | false |
+| `initialDir` | (なし) | パス | なし(初期位置を指定しない)。フォルダ選択ダイアログの初期位置 |
 
 - `projectRoot` と `configPath` は設定キーにしない。設定ファイルの場所がそれらで決まるため。
+- `initialDir` は、フォルダ選択ダイアログ(`-ProjectRoot` を省略したとき)の初期位置。(確定、2026-10-06)
+  - 個人のパスになるので、`settings.local.json` に書く。
+  - 引数は設けない。引数で指定するなら `-ProjectRoot` を使えばよいため。
+  - 環境変数(`%USERPROFILE%` など)は展開する。
+  - 相対パスはエラーにする(.bat から起動すると基準が分かりにくいため)。展開できなかった環境変数が残って相対パスになった場合も同じ。
+  - フォルダがなければ、ログに警告を出し、初期位置を指定せずにダイアログを開く。
+  - ダイアログには、`InitialDirectory` があれば(.NET 8 以降、PS 7)それを、なければ(.NET Framework、PS 5.1)`SelectedPath` を設定する。PS 7 で `SelectedPath` を使うと、指定したフォルダではなく親フォルダが開く(WinForms のソース `FolderBrowserDialog.cs` で確認。目視は未確認)。PS 5.1 はツリーがそのフォルダまで展開される。
 - `exclude` は git pathspec(glob)の書式で書き、`:(exclude,glob)<パターン>` として git に渡す。対象プロジェクトの最上位からの相対パスで書く。(確定)
   - 例: `docs/**`, `**/*.log`, `tests`(フォルダごと)。
   - .gitignore と違い、`*.log` は最上位のファイルにしか当たらない。どの階層にも当てるなら `**/*.log`。
@@ -289,11 +297,12 @@ odekake-winpython\
 │  ├─ Project.ps1           ← Read-PyProject, Get-ProjectVersion, Get-PythonMinor, Get-ProjectFiles, Get-NonPyPIRequirements(§15)
 │  ├─ WinPython.ps1         ← Get-Sha256, Get-WinPythonArchive, Expand-WinPython
 │  ├─ Zip.ps1               ← New-ZipFile, New-ZipFromDirectory, Get-SystemTarPath, New-SevenZipFromDirectory, Assert-SevenZipWritable(§16)
-│  └─ Gui.ps1               ← New-TopMostOwner, Select-ProjectFolder, Show-Popup, Get-DownloadsFolder
+│  └─ Gui.ps1               ← New-TopMostOwner, Resolve-InitialDir, Select-ProjectFolder, Show-Popup, Get-DownloadsFolder
 └─ tests\
    ├─ Settings.Tests.ps1
    ├─ Project.Tests.ps1
-   └─ Zip.Tests.ps1
+   ├─ Zip.Tests.ps1
+   └─ Gui.Tests.ps1
 ```
 - 固定値(`$WinPythonTable`, `$PruneTargets`, `$SettingTypes`, `$PthFileName`, `$PthContent`, `$EnvOverrides`)は `build-offline.ps1` の先頭に残す。WinPython の版を上げるときに見る場所を1か所にするため。
 - 読み込みは `build-offline.ps1` で `foreach ($f in 'Log','Settings','Project','WinPython','Zip','Gui') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }`。
@@ -325,6 +334,8 @@ odekake-winpython\
   - Get-ProjectFiles(一時フォルダで `git init` して作る): 既定は未 add のファイルを含む / `trackedOnly` / `exclude` の `tests`, `*.log`, `**/*.log`(§11 の挙動)/ 削除済みファイルはスキップ / `winpython.zip` や `winpython/` があるとエラー / 日本語のファイル名 / export-ignore(ファイル、フォルダ(`/` 付き・なし)、パターン、未 add のファイル、`.gitattributes` 自身、サブフォルダの `.gitattributes`、`set` 以外の値は除かない)/ `includeExportIgnored` で含める / export-ignore の `winpython.zip` はエラーにしない / `exclude`・`trackedOnly` との併用。
 - Zip.Tests.ps1
   - エントリ名の区切りが `/` だけになる(§13)。空フォルダが入る。`Store` のエントリが無圧縮になる。
+- Gui.Tests.ps1(ダイアログは出さない)
+  - Resolve-InitialDir: 未指定は $null / 存在するフォルダはそのまま(正規化する)/ 環境変数を展開する / ないフォルダやファイルは警告して $null / 相対パスはエラー。
 
 ### 前提
 - テストは Pester 5 を前提にする。(確定)Windows 標準の Pester は 3.4 で書き方が違う。`Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -MaximumVersion 5.99` で入れる。

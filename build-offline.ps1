@@ -59,6 +59,7 @@ $PruneTargets = @(
 
 # 設定キーと型。引数名はキーの先頭を大文字にしたもの。
 # 型が配列のキーは、その中の値だけを受け付ける(大文字小文字も区別する)。既定値は先頭の値。
+# initialDir は設定ファイル専用で、引数はない(引数で指定するなら -ProjectRoot を使えばよいため)。
 $SettingTypes = [ordered]@{
     pythonVersion          = 'string'
     outputDir              = 'string'
@@ -72,6 +73,7 @@ $SettingTypes = [ordered]@{
     installer              = @('uv', 'pip')
     winPythonArchiveFormat = @('zip', '7z')
     noPopup                = 'bool'
+    initialDir             = 'string'
 }
 
 # pip モードで入れられる index(uv.lock の registry)。これ以外の index の依存があればエラーにする。
@@ -121,7 +123,7 @@ function Invoke-Build {
     if ($bound.ContainsKey('ProjectRoot')) {
         $root = Resolve-FullPath $bound['ProjectRoot']
     } else {
-        $selected = Select-ProjectFolder
+        $selected = Select-ProjectFolder (Resolve-InitialDir $cfg.initialDir)
         if (-not $selected) {
             Write-Host 'フォルダが選ばれなかったので、何もせず終了します。'
             $script:Cancelled = $true
