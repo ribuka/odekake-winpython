@@ -218,6 +218,7 @@ Describe 'Get-ProjectFiles' {
 
     It "'<Rel>' があると成果物と衝突するのでエラー" -ForEach @(
         @{ Rel = 'winpython.zip' }
+        @{ Rel = 'winpython.7z' }
         @{ Rel = 'winpython/readme.txt' }
     ) {
         $root = New-GitProject -Tracked @('a.txt') -Untracked @($Rel)

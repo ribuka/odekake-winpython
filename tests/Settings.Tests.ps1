@@ -39,6 +39,7 @@ Describe 'Get-EffectiveSettings' {
         , $cfg.groups | Should -BeOfType [string[]]
         $cfg.groups.Count | Should -Be 0
         $cfg.installer | Should -BeExactly 'uv'
+        $cfg.winPythonArchiveFormat | Should -BeExactly 'zip'
     }
 
     It '-ConfigPath がなければ RepoRoot\config\settings.json を読む' {
@@ -97,6 +98,22 @@ Describe 'Get-EffectiveSettings' {
             Should -Throw "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください(引数 -Installer)*"
     }
 
+    It 'winPythonArchiveFormat は設定ファイルと引数で切り替えられる' {
+        $root = New-ConfigDir (Join-Path $TestDrive 'archiveformat') '{ "winPythonArchiveFormat": "7z" }' $null
+        (Get-EffectiveSettings @{} $SettingTypes $root).winPythonArchiveFormat | Should -BeExactly '7z'
+        (Get-EffectiveSettings @{ WinPythonArchiveFormat = 'zip' } $SettingTypes $root).winPythonArchiveFormat | Should -BeExactly 'zip'
+    }
+
+    It '引数の winPythonArchiveFormat が不正ならエラー: <Value>' -ForEach @(
+        @{ Value = 'tar' }
+        @{ Value = '7Z' }
+        @{ Value = '' }
+    ) {
+        $root = Join-Path $TestDrive 'none'
+        { Get-EffectiveSettings @{ WinPythonArchiveFormat = $Value } $SettingTypes $root } |
+            Should -Throw "*設定 'winPythonArchiveFormat' は `"zip`" / `"7z`" のどれかにしてください(引数 -WinPythonArchiveFormat)*"
+    }
+
     It '-ConfigPath のファイルがないとエラー' {
         $missing = Join-Path $TestDrive 'missing\settings.json'
         { Get-EffectiveSettings @{ ConfigPath = $missing } $SettingTypes $TestDrive } |
@@ -145,6 +162,8 @@ Describe 'Read-SettingsFile' {
         @{ Json = '{ "installer": "Pip" }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
         @{ Json = '{ "installer": ["uv"] }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
         @{ Json = '{ "installer": null }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
+        @{ Json = '{ "winPythonArchiveFormat": "ZIP" }'; Message = "*設定 'winPythonArchiveFormat' は `"zip`" / `"7z`" のどれかにしてください*" }
+        @{ Json = '{ "winPythonArchiveFormat": 7 }'; Message = "*設定 'winPythonArchiveFormat' は `"zip`" / `"7z`" のどれかにしてください*" }
     ) {
         { Read-Json $Json } | Should -Throw $Message
     }
