@@ -1,11 +1,11 @@
-﻿# lib\Settings.ps1 のテスト(Pester 5)。一時フォルダに settings.json / settings.local.json を書いて呼ぶ。
+﻿# Tests for lib\Settings.ps1 (Pester 5). Writes settings.json / settings.local.json into a temporary folder and calls the functions.
 
 BeforeAll {
     $repo = Split-Path -Parent $PSScriptRoot
     . (Join-Path $repo 'lib\Log.ps1')
     . (Join-Path $repo 'lib\Settings.ps1')
 
-    # 設定キーと型は build-offline.ps1 の固定値を使う。スクリプトは実行せず、代入文の右辺だけ評価する。
+    # Setting keys and types come from the constant in build-offline.ps1. The script is not run; only the right-hand side of the assignment is evaluated.
     $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'build-offline.ps1'), [ref]$null, [ref]$null)
     $assign = $ast.Find({
         param($n)
@@ -15,7 +15,7 @@ BeforeAll {
 
     Mock Write-Log { }
 
-    # $Dir\config に設定ファイルを書く。値が $null のファイルは作らない。返り値は $Dir。
+    # Writes settings files into $Dir\config. A file whose value is $null is not created. Returns $Dir.
     function New-ConfigDir([string]$Dir, [string]$Settings, [string]$Local) {
         $configDir = Join-Path $Dir 'config'
         New-Item -ItemType Directory -Path $configDir -Force | Out-Null
@@ -27,7 +27,7 @@ BeforeAll {
 }
 
 Describe 'Get-EffectiveSettings' {
-    It '設定ファイルがなくても既定値が返る' {
+    It 'returns the defaults without settings files' {
         $root = Join-Path $TestDrive 'none'
         New-Item -ItemType Directory -Path $root | Out-Null
         $cfg = Get-EffectiveSettings @{} $SettingTypes $root
@@ -42,13 +42,13 @@ Describe 'Get-EffectiveSettings' {
         $cfg.winPythonArchiveFormat | Should -BeExactly 'zip'
     }
 
-    It '-ConfigPath がなければ RepoRoot\config\settings.json を読む' {
+    It 'reads RepoRoot\config\settings.json without -ConfigPath' {
         $root = New-ConfigDir (Join-Path $TestDrive 'default') '{ "outputDir": "D:\\out" }' $null
         $cfg = Get-EffectiveSettings @{} $SettingTypes $root
         $cfg.outputDir | Should -Be 'D:\out'
     }
 
-    It '優先順位は 引数 > settings.local.json > settings.json > 既定値 で、キー単位でマージされる' {
+    It 'merges key by key with priority argument > settings.local.json > settings.json > defaults' {
         $root = New-ConfigDir (Join-Path $TestDrive 'priority') `
             '{ "outputDir": "from-settings", "importName": "from_settings", "groups": ["s"], "extras": ["s"], "trackedOnly": true }' `
             '{ "outputDir": "from-local", "groups": ["l"], "extras": ["l"] }'
@@ -62,69 +62,69 @@ Describe 'Get-EffectiveSettings' {
         $cfg.noPopup | Should -BeFalse
     }
 
-    It 'スイッチの引数は bool になる' {
+    It 'turns switch arguments into bool' {
         $root = New-ConfigDir (Join-Path $TestDrive 'switch') '{ "trackedOnly": false }' $null
         $cfg = Get-EffectiveSettings @{ TrackedOnly = [switch]$true } $SettingTypes $root
         $cfg.trackedOnly | Should -BeOfType [bool]
         $cfg.trackedOnly | Should -BeTrue
     }
 
-    It "配列の引数 -Groups 'a,b' は a と b に分かれる" {
+    It "splits the array argument -Groups 'a,b' into a and b" {
         $root = Join-Path $TestDrive 'none'
         $cfg = Get-EffectiveSettings @{ Groups = @('a,b'); Extras = @(' x , y', 'z', ',') } $SettingTypes $root
         $cfg.groups | Should -Be @('a', 'b')
         $cfg.extras | Should -Be @('x', 'y', 'z')
     }
 
-    It '引数の pythonVersion では上書きしない(Get-PythonMinor で扱う)' {
+    It 'does not override with the pythonVersion argument (handled by Get-PythonMinor)' {
         $root = New-ConfigDir (Join-Path $TestDrive 'pyver') '{ "pythonVersion": "3.12" }' $null
         $cfg = Get-EffectiveSettings @{ PythonVersion = '3.14' } $SettingTypes $root
         $cfg.pythonVersion | Should -Be '3.12'
     }
 
-    It 'installer は設定ファイルと引数で切り替えられる' {
+    It 'switches installer with the settings file and the argument' {
         $root = New-ConfigDir (Join-Path $TestDrive 'installer') '{ "installer": "pip" }' $null
         (Get-EffectiveSettings @{} $SettingTypes $root).installer | Should -BeExactly 'pip'
         (Get-EffectiveSettings @{ Installer = 'uv' } $SettingTypes $root).installer | Should -BeExactly 'uv'
     }
 
-    It '引数の installer が不正ならエラー: <Value>' -ForEach @(
+    It 'fails on an invalid installer argument: <Value>' -ForEach @(
         @{ Value = 'conda' }
         @{ Value = 'UV' }
         @{ Value = '' }
     ) {
         $root = Join-Path $TestDrive 'none'
         { Get-EffectiveSettings @{ Installer = $Value } $SettingTypes $root } |
-            Should -Throw "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください(引数 -Installer)*"
+            Should -Throw "*Setting 'installer' must be one of `"uv`" / `"pip`" (argument -Installer)*"
     }
 
-    It 'winPythonArchiveFormat は設定ファイルと引数で切り替えられる' {
+    It 'switches winPythonArchiveFormat with the settings file and the argument' {
         $root = New-ConfigDir (Join-Path $TestDrive 'archiveformat') '{ "winPythonArchiveFormat": "7z" }' $null
         (Get-EffectiveSettings @{} $SettingTypes $root).winPythonArchiveFormat | Should -BeExactly '7z'
         (Get-EffectiveSettings @{ WinPythonArchiveFormat = 'zip' } $SettingTypes $root).winPythonArchiveFormat | Should -BeExactly 'zip'
     }
 
-    It '引数の winPythonArchiveFormat が不正ならエラー: <Value>' -ForEach @(
+    It 'fails on an invalid winPythonArchiveFormat argument: <Value>' -ForEach @(
         @{ Value = 'tar' }
         @{ Value = '7Z' }
         @{ Value = '' }
     ) {
         $root = Join-Path $TestDrive 'none'
         { Get-EffectiveSettings @{ WinPythonArchiveFormat = $Value } $SettingTypes $root } |
-            Should -Throw "*設定 'winPythonArchiveFormat' は `"zip`" / `"7z`" のどれかにしてください(引数 -WinPythonArchiveFormat)*"
+            Should -Throw "*Setting 'winPythonArchiveFormat' must be one of `"zip`" / `"7z`" (argument -WinPythonArchiveFormat)*"
     }
 
-    It 'initialDir は既定で空、settings.local.json で指定できる' {
+    It 'initialDir is empty by default and can be set in settings.local.json' {
         $root = Join-Path $TestDrive 'none'
         (Get-EffectiveSettings @{} $SettingTypes $root).initialDir | Should -BeNullOrEmpty
         $root = New-ConfigDir (Join-Path $TestDrive 'initialdir') $null '{ "initialDir": "%USERPROFILE%\\repos" }'
         (Get-EffectiveSettings @{} $SettingTypes $root).initialDir | Should -BeExactly '%USERPROFILE%\repos'
     }
 
-    It '-ConfigPath のファイルがないとエラー' {
+    It 'fails when the -ConfigPath file does not exist' {
         $missing = Join-Path $TestDrive 'missing\settings.json'
         { Get-EffectiveSettings @{ ConfigPath = $missing } $SettingTypes $TestDrive } |
-            Should -Throw "-ConfigPath で指定された設定ファイルがありません: $missing"
+            Should -Throw "Settings file specified by -ConfigPath not found: $missing"
     }
 }
 
@@ -137,49 +137,49 @@ Describe 'Read-SettingsFile' {
         }
     }
 
-    It 'ファイルがなければ空' {
+    It 'returns nothing when the file does not exist' {
         $result = Read-SettingsFile (Join-Path $TestDrive 'nothing.json') $SettingTypes
         $result.Count | Should -Be 0
     }
 
-    It '空のファイルは空' {
+    It 'returns nothing for an empty file' {
         (Read-Json "  `r`n").Count | Should -Be 0
     }
 
-    It '配列は string[] になる' {
+    It 'turns arrays into string[]' {
         $result = Read-Json '{ "exclude": ["docs/**", "tests"] }'
         , $result.exclude | Should -BeOfType [string[]]
         $result.exclude | Should -Be @('docs/**', 'tests')
     }
 
-    It '未知のキーはエラー' {
-        { Read-Json '{ "foo": 1 }' } | Should -Throw "*未知のキー 'foo'*"
+    It 'fails on an unknown key' {
+        { Read-Json '{ "foo": 1 }' } | Should -Throw "*Unknown key 'foo'*"
     }
 
-    It '大文字小文字だけ違うキー(outputdir)もエラー' {
-        { Read-Json '{ "outputdir": "x" }' } | Should -Throw "*未知のキー 'outputdir'*"
+    It 'fails on a key that differs only in case (outputdir)' {
+        { Read-Json '{ "outputdir": "x" }' } | Should -Throw "*Unknown key 'outputdir'*"
     }
 
-    It '型違い: <Json>' -ForEach @(
-        @{ Json = '{ "trackedOnly": "yes" }'; Message = "*設定 'trackedOnly' は true / false にしてください*" }
-        @{ Json = '{ "groups": "dev" }'; Message = "*設定 'groups' は文字列の配列*" }
-        @{ Json = '{ "groups": [1] }'; Message = "*設定 'groups' の要素は文字列にしてください*" }
-        @{ Json = '{ "pythonVersion": 3.13 }'; Message = "*設定 'pythonVersion' は文字列にしてください*" }
-        @{ Json = '{ "installer": "conda" }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
-        @{ Json = '{ "installer": "Pip" }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
-        @{ Json = '{ "installer": ["uv"] }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
-        @{ Json = '{ "installer": null }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
-        @{ Json = '{ "winPythonArchiveFormat": "ZIP" }'; Message = "*設定 'winPythonArchiveFormat' は `"zip`" / `"7z`" のどれかにしてください*" }
-        @{ Json = '{ "winPythonArchiveFormat": 7 }'; Message = "*設定 'winPythonArchiveFormat' は `"zip`" / `"7z`" のどれかにしてください*" }
+    It 'fails on a wrong type: <Json>' -ForEach @(
+        @{ Json = '{ "trackedOnly": "yes" }'; Message = "*Setting 'trackedOnly' must be true / false*" }
+        @{ Json = '{ "groups": "dev" }'; Message = "*Setting 'groups' must be an array of strings*" }
+        @{ Json = '{ "groups": [1] }'; Message = "*The items of setting 'groups' must be strings*" }
+        @{ Json = '{ "pythonVersion": 3.13 }'; Message = "*Setting 'pythonVersion' must be a string*" }
+        @{ Json = '{ "installer": "conda" }'; Message = "*Setting 'installer' must be one of `"uv`" / `"pip`"*" }
+        @{ Json = '{ "installer": "Pip" }'; Message = "*Setting 'installer' must be one of `"uv`" / `"pip`"*" }
+        @{ Json = '{ "installer": ["uv"] }'; Message = "*Setting 'installer' must be one of `"uv`" / `"pip`"*" }
+        @{ Json = '{ "installer": null }'; Message = "*Setting 'installer' must be one of `"uv`" / `"pip`"*" }
+        @{ Json = '{ "winPythonArchiveFormat": "ZIP" }'; Message = "*Setting 'winPythonArchiveFormat' must be one of `"zip`" / `"7z`"*" }
+        @{ Json = '{ "winPythonArchiveFormat": 7 }'; Message = "*Setting 'winPythonArchiveFormat' must be one of `"zip`" / `"7z`"*" }
     ) {
         { Read-Json $Json } | Should -Throw $Message
     }
 
-    It 'JSON として読めなければエラー' {
-        { Read-Json '{ "groups": ' } | Should -Throw '*設定ファイルを JSON として読めません*'
+    It 'fails when the file cannot be read as JSON' {
+        { Read-Json '{ "groups": ' } | Should -Throw '*Cannot read the settings file as JSON*'
     }
 
-    It '最上位がオブジェクトでなければエラー' {
-        { Read-Json '["a"]' } | Should -Throw '*最上位は { } のオブジェクトにしてください*'
+    It 'fails when the top level is not an object' {
+        { Read-Json '["a"]' } | Should -Throw '*The top level of the settings file must be a { } object*'
     }
 }

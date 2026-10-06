@@ -1,4 +1,4 @@
-﻿# lib\Gui.ps1 のテスト(Pester 5)。ダイアログは出さず、初期位置の解決(Resolve-InitialDir)だけを見る。
+﻿# Tests for lib\Gui.ps1 (Pester 5). No dialogs are shown; only the start folder resolution (Resolve-InitialDir) is tested.
 
 BeforeAll {
     $repo = Split-Path -Parent $PSScriptRoot
@@ -9,27 +9,27 @@ BeforeAll {
 }
 
 Describe 'Resolve-InitialDir' {
-    It '未指定なら $null: <Name>' -ForEach @(
+    It 'returns $null when not set: <Name>' -ForEach @(
         @{ Name = 'null'; Value = $null }
-        @{ Name = '空文字'; Value = '' }
+        @{ Name = 'empty string'; Value = '' }
     ) {
         Resolve-InitialDir $Value | Should -BeNullOrEmpty
         Should -Invoke Write-Log -Times 0
     }
 
-    It '存在するフォルダはそのまま返る' {
+    It 'returns an existing folder as it is' {
         $dir = Join-Path $TestDrive 'exists'
         New-Item -ItemType Directory -Path $dir | Out-Null
         Resolve-InitialDir $dir | Should -Be $dir
     }
 
-    It '. や .. を含むパスは正規化する' {
+    It 'normalizes paths that contain . or ..' {
         $dir = Join-Path $TestDrive 'norm'
         New-Item -ItemType Directory -Path (Join-Path $dir 'sub') | Out-Null
         Resolve-InitialDir (Join-Path $dir 'sub\..\.') | Should -Be $dir
     }
 
-    It '環境変数を展開する' {
+    It 'expands environment variables' {
         $dir = Join-Path $TestDrive 'env'
         New-Item -ItemType Directory -Path $dir | Out-Null
         $env:ODEKAKE_TEST_INITIAL_DIR = $TestDrive
@@ -40,26 +40,26 @@ Describe 'Resolve-InitialDir' {
         }
     }
 
-    It '存在しないフォルダは警告して $null' {
+    It 'warns and returns $null for a missing folder' {
         $dir = Join-Path $TestDrive 'missing'
         Resolve-InitialDir $dir | Should -BeNullOrEmpty
         Should -Invoke Write-Log -Times 1 -ParameterFilter { $Message -like "*initialDir*$dir*" }
     }
 
-    It 'ファイルを指していたら警告して $null' {
+    It 'warns and returns $null when the path is a file' {
         $file = Join-Path $TestDrive 'file.txt'
         Set-Content -LiteralPath $file -Value 'x'
         Resolve-InitialDir $file | Should -BeNullOrEmpty
         Should -Invoke Write-Log -Times 1
     }
 
-    It '相対パスはエラー: <Value>' -ForEach @(
+    It 'fails on a relative path: <Value>' -ForEach @(
         @{ Value = 'repos' }
         @{ Value = '.\repos' }
         @{ Value = '\repos' }
         @{ Value = 'C:repos' }
         @{ Value = '%ODEKAKE_UNDEFINED_VAR%\repos' }
     ) {
-        { Resolve-InitialDir $Value } | Should -Throw "*設定 'initialDir' は絶対パス*"
+        { Resolve-InitialDir $Value } | Should -Throw "*Setting 'initialDir' must be an absolute path*"
     }
 }

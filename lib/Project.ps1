@@ -1,8 +1,8 @@
-﻿# 対象プロジェクトの情報
-# build-offline.ps1 から dot-source される。単体では実行しない。
+﻿# Information about the target project
+# Dot-sourced by build-offline.ps1. Not meant to be run on its own.
 
-# pyproject.toml の [project] から name / version / dynamic を読む。
-# TOML パーサーがないため、正規表現で必要な値だけ取り出す(1行の文字列値のみ対応)。
+# Reads name / version / dynamic from [project] in pyproject.toml.
+# There is no TOML parser, so only the needed values are extracted with regular expressions (single-line string values only).
 function Read-PyProject([string]$Path) {
     $body = New-Object System.Text.StringBuilder
     $inProject = $false
@@ -38,19 +38,19 @@ function Get-ProjectVersion([string]$Root, [hashtable]$PyProject) {
     if ($PyProject.Dynamic -contains 'version') {
         $versionFile = Join-Path $Root 'VERSION'
         if (-not (Test-Path -LiteralPath $versionFile -PathType Leaf)) {
-            throw "pyproject.toml の version が dynamic ですが、VERSION ファイルがありません: $versionFile"
+            throw "version in pyproject.toml is dynamic, but there is no VERSION file: $versionFile"
         }
         $version = ([System.IO.File]::ReadAllText($versionFile)).Trim()
         if (-not $version -or $version.Contains("`n")) {
-            throw "VERSION ファイルには、バージョンを1行だけ書いてください: $versionFile"
+            throw "The VERSION file must contain the version on a single line: $versionFile"
         }
         return $version
     }
-    throw 'pyproject.toml の [project] に version がありません(dynamic にも version がありません)。'
+    throw 'pyproject.toml has no version in [project] (and version is not in dynamic either).'
 }
 
-# Python のマイナーバージョン(3.13 など)を決める。
-# 優先順位: 引数 -PythonVersion > .python-version > 設定ファイルの pythonVersion
+# Decides the Python minor version (such as 3.13).
+# Priority: argument -PythonVersion > .python-version > pythonVersion in the settings file
 function Get-PythonMinor([string]$Root, [string]$FromArgument, [string]$FromSettings) {
     $fromFile = $null
     $pvFile = Join-Path $Root '.python-version'
@@ -62,34 +62,34 @@ function Get-PythonMinor([string]$Root, [string]$FromArgument, [string]$FromSett
     }
 
     if ($FromArgument) {
-        $source = '引数 -PythonVersion'
+        $source = 'argument -PythonVersion'
         $raw = $FromArgument
     } elseif ($fromFile) {
         $source = '.python-version'
         $raw = $fromFile
     } elseif ($FromSettings) {
-        $source = '設定ファイルの pythonVersion'
+        $source = 'pythonVersion in the settings file'
         $raw = $FromSettings
     } else {
-        throw ".python-version がありません。pythonVersion(-PythonVersion)で 3.13 のように指定してください。"
+        throw ".python-version not found. Specify the version with pythonVersion (-PythonVersion), such as 3.13."
     }
 
     $m = [regex]::Match($raw, '(\d+)\.(\d+)')
-    if (-not $m.Success) { throw "Python のバージョンを読み取れません($source): '$raw'" }
+    if (-not $m.Success) { throw "Cannot read the Python version ($source): '$raw'" }
     $minor = "$($m.Groups[1].Value).$($m.Groups[2].Value)"
 
     if ($FromArgument -and $fromFile) {
         $fm = [regex]::Match($fromFile, '(\d+)\.(\d+)')
         if ($fm.Success -and "$($fm.Groups[1].Value).$($fm.Groups[2].Value)" -ne $minor) {
-            Write-Log "注意: .python-version ($fromFile) と異なる Python $minor を、引数 -PythonVersion の指定に従って使います。" -Color Yellow
+            Write-Log "Warning: using Python $minor as specified by argument -PythonVersion, which differs from .python-version ($fromFile)." -Color Yellow
         }
     }
-    Write-Log "Python バージョン: $minor ($source`: $raw)"
+    Write-Log "Python version: $minor ($source`: $raw)"
     return $minor
 }
 
-# ZIP に入れるファイルを git で列挙する(対象プロジェクトからの相対パス、区切りは /)。
-# $IncludeExportIgnoredFlag が false なら、.gitattributes で export-ignore が付いたファイルを除く(issue #12)。
+# Lists the files to put into the ZIP with git (paths relative to the target project, separated by /).
+# If $IncludeExportIgnoredFlag is false, files marked export-ignore in .gitattributes are left out (issue #12).
 function Get-ProjectFiles([string]$Root, [bool]$TrackedOnlyFlag, [string[]]$ExcludePatterns, [bool]$IncludeExportIgnoredFlag) {
     $gitArgs = @('-C', $Root, '-c', 'core.quotepath=off', 'ls-files', '-z', '--cached')
     if (-not $TrackedOnlyFlag) { $gitArgs += @('--others', '--exclude-standard') }
@@ -102,8 +102,8 @@ function Get-ProjectFiles([string]$Root, [bool]$TrackedOnlyFlag, [string[]]$Excl
         if (-not $rel) { continue }
         $full = Join-Path $Root ($rel -replace '/', '\')
         if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
-            # 削除済みでまだコミットしていないファイルや、サブモジュール
-            Write-Log "スキップ(ファイルとして存在しない): $rel" -Color Yellow
+            # Files deleted but not yet committed, or submodules
+            Write-Log "Skipped (not an existing file): $rel" -Color Yellow
             continue
         }
         $candidates.Add($rel)
@@ -113,22 +113,22 @@ function Get-ProjectFiles([string]$Root, [bool]$TrackedOnlyFlag, [string[]]$Excl
     $files = New-Object System.Collections.Generic.List[string]
     foreach ($rel in $candidates) {
         if ($ignored -and $ignored.Contains($rel)) {
-            Write-Log "除外(export-ignore): $rel"
+            Write-Log "Excluded (export-ignore): $rel"
             continue
         }
         if ($rel -eq 'winpython.zip' -or $rel -eq 'winpython.7z' -or $rel -like 'winpython/*') {
-            throw "対象プロジェクトに '$rel' があり、成果物の winpython.zip / winpython.7z / winpython\ と衝突します。exclude で除外してください。"
+            throw "The target project has '$rel', which conflicts with winpython.zip / winpython.7z / winpython\ in the output. Leave it out with exclude."
         }
         $files.Add($rel)
     }
-    if ($files.Count -eq 0) { throw 'ZIP に入れるファイルが1つもありません。' }
+    if ($files.Count -eq 0) { throw 'There are no files to put into the ZIP.' }
     return , $files.ToArray()
 }
 
-# $Paths(/ 区切りの相対パス)のうち、export-ignore が付いたものを HashSet で返す。親フォルダに付いたものも含む。
-# git check-attr は、フォルダに当たるパターン(/tests/ など)を中のファイルには効かせない。
-# そこで親フォルダも末尾に / を付けて判定し、git archive がフォルダごと除くのと同じ結果にする。
-# .gitattributes は作業ツリーのものを読む(git archive の既定は対象コミットのもの)。未 add のファイルも ZIP に入れるため。
+# Returns, as a HashSet, the $Paths (relative paths separated by /) marked export-ignore, including those whose parent folder is marked.
+# git check-attr does not apply a pattern that matches a folder (such as /tests/) to the files inside it.
+# So parent folders are also checked with a trailing /, giving the same result as git archive leaving out the whole folder.
+# .gitattributes is read from the working tree (git archive uses the target commit by default), because files not yet added also go into the ZIP.
 function Get-ExportIgnoredPaths([string]$Root, [string[]]$Paths) {
     $ancestors = @{}
     $queries = New-Object System.Collections.Generic.List[string]
@@ -140,15 +140,15 @@ function Get-ExportIgnoredPaths([string]$Root, [string[]]$Paths) {
         foreach ($q in $dirs + $rel) { if ($seen.Add($q)) { $queries.Add($q) } }
     }
 
-    # Invoke-Native は標準入力に対応しないので、--stdin ではなく引数で渡す。
-    # Windows のコマンドラインの長さの上限(32767 文字)に収まるよう、分けて呼ぶ。
+    # Invoke-Native does not support standard input, so paths are passed as arguments instead of --stdin.
+    # Call in chunks to stay within the Windows command-line length limit (32767 characters).
     $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     $chunk = New-Object System.Collections.Generic.List[string]
     $length = 0
     $flush = {
         $out = Invoke-Native git (@('-C', $Root, 'check-attr', '-z', 'export-ignore', '--') + $chunk.ToArray()) -Capture
-        # 出力は「パス NUL 属性名 NUL 値 NUL」の繰り返し。値が set のものだけ除く(git archive と同じ)。
-        # 文字列値の export-ignore=set も set と出力されるので区別できず、除いてしまう(既知の制限。spec §2)。
+        # The output repeats "path NUL attribute NUL value NUL". Only entries whose value is set are left out (same as git archive).
+        # The string value export-ignore=set is also printed as set and cannot be told apart, so it is left out too (known limitation; spec §2).
         $fields = ($out -join "`n") -split "`0"
         for ($j = 0; $j + 2 -lt $fields.Count; $j += 3) {
             if ($fields[$j + 2] -eq 'set') { [void]$set.Add($fields[$j]) }
@@ -171,15 +171,15 @@ function Get-ExportIgnoredPaths([string]$Root, [string[]]$Paths) {
     return , $result
 }
 
-# requirements.txt(uv export の出力)に含まれる依存のうち、uv.lock で PyPI 以外の index(registry)から取るものを返す。
-# pip は requirements.txt の index を知らないので、pip モードでは入れられない(issue #10)。
-# 返り値は "name==version (index の URL)" の配列。uv.lock は TOML パーサーがないため、行単位で読む。
-# 環境マーカーで index を切り替えると、同じ name==version が registry 違いで複数ある。
-# requirements.txt からはどれが選ばれたか分からないので、1つでも PyPI 以外があれば返す(安全側に倒す)。
+# Returns the dependencies in requirements.txt (the output of uv export) that uv.lock takes from an index (registry) other than PyPI.
+# pip does not know the index from requirements.txt, so pip mode cannot install them (issue #10).
+# Returns an array of "name==version (index URL)". There is no TOML parser, so uv.lock is read line by line.
+# When environment markers switch the index, the same name==version appears more than once with different registries.
+# requirements.txt does not tell which one was chosen, so it is returned if any of them is not PyPI (to be safe).
 function Get-NonPyPIRequirements([string]$LockPath, [string]$RequirementsPath, [string]$PyPIIndexUrl) {
     $normalize = { param([string]$n) ($n -replace '[-_.]+', '-').ToLowerInvariant() }
 
-    # uv.lock の [[package]] ごとに、name / version / registry を集める(キーごとに registry の一覧)
+    # Collect name / version / registry for each [[package]] in uv.lock (a list of registries per key)
     $registries = @{}
     $current = $null
     $flush = {

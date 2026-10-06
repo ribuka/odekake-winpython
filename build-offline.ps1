@@ -1,10 +1,10 @@
 ﻿<#
 .SYNOPSIS
-    uv プロジェクトを、WinPython 同梱のオフライン持ち出し用 ZIP にする。
+    Packs a uv project into a ZIP bundled with WinPython, for use on offline machines.
 
 .DESCRIPTION
-    仕様は docs/spec.md を参照。
-    設定の優先順位: 引数 > config\settings.local.json > config\settings.json > 既定値
+    See docs/spec.md for the specification.
+    Settings priority: arguments > config\settings.local.json > config\settings.json > defaults
 
 .EXAMPLE
     .\build-offline.ps1 -ProjectRoot D:\work\foo -Groups gui -Exclude 'docs/**','tests'
@@ -29,37 +29,37 @@ param(
 
 Set-StrictMode -Version 3.0
 $ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'   # 5.1 の Invoke-WebRequest は進捗表示があると極端に遅い
+$ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest in 5.1 is extremely slow while showing progress
 
 # ---------------------------------------------------------------------------
-# 固定値
+# Constants
 # ---------------------------------------------------------------------------
 
-# WinPython dot 版。リリースは行ごとに固定する(spec §5)。URL は規則から組み立てず完全な形で持つ。
+# WinPython dot editions. Each row pins one release (spec §5). Keep the full URL instead of building it from a pattern.
 $WinPythonTable = @{
-    '3.12' = @{   # 2025-03 リリース(3.12 がある最後の安定版)
+    '3.12' = @{   # released 2025-03 (the last stable release that has 3.12)
         Url    = 'https://github.com/winpython/winpython/releases/download/16.6.20250620final/Winpython64-3.12.10.1dot.zip'
         Sha256 = '7a1f004aec39615977b2b245423a50115530d16af3418df77977186a555d0a40'
     }
-    '3.13' = @{   # 2026-03 リリース
+    '3.13' = @{   # released 2026-03
         Url    = 'https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.13.15.0dot.zip'
         Sha256 = '28e36408f0140c50b207ea059a599c664564e68a3cbb835f03a71f4601efd8f1'
     }
-    '3.14' = @{   # 2026-03 リリース
+    '3.14' = @{   # released 2026-03
         Url    = 'https://github.com/winpython/winpython/releases/download/17.12.20260522/WinPython/WinPython64-3.14.7.0dot.zip'
         Sha256 = 'dbabedfb50eeb3c2c63dc43c9cb6239eae4a582c3bfd9a5f2ffd00a09b49a527'
     }
 }
 
-# pruneWinPython で消す、WinPython 最上位の項目(spec §8)
+# Top-level WinPython items removed by pruneWinPython (spec §8)
 $PruneTargets = @(
     'Jupyter Lab.exe', 'Jupyter Notebook.exe', 'Spyder.exe', 'Spyder reset.exe', 'VS Code.exe',
     'notebooks', 'wheelhouse'
 )
 
-# 設定キーと型。引数名はキーの先頭を大文字にしたもの。
-# 型が配列のキーは、その中の値だけを受け付ける(大文字小文字も区別する)。既定値は先頭の値。
-# initialDir は設定ファイル専用で、引数はない(引数で指定するなら -ProjectRoot を使えばよいため)。
+# Setting keys and their types. The argument name is the key with its first letter capitalized.
+# A key whose type is an array accepts only the values in it (case-sensitive). Its default is the first value.
+# initialDir is for settings files only and has no argument (use -ProjectRoot to specify the folder by argument).
 $SettingTypes = [ordered]@{
     pythonVersion          = 'string'
     outputDir              = 'string'
@@ -76,13 +76,13 @@ $SettingTypes = [ordered]@{
     initialDir             = 'string'
 }
 
-# pip モードで入れられる index(uv.lock の registry)。これ以外の index の依存があればエラーにする。
+# The index that pip mode can install from (the registry in uv.lock). Dependencies from any other index are an error.
 $PyPIIndexUrl = 'https://pypi.org/simple'
 
 $PthFileName = 'odekake-src.pth'
 $PthContent  = '..\..\..\..\src'
 
-# 子プロセス(uv, pip, python)に影響する環境変数。終了時に元に戻す。
+# Environment variables that affect child processes (uv, pip, python). Restored on exit.
 $EnvOverrides = @{
     PYTHONPATH       = $null
     PYTHONHOME       = $null
@@ -102,21 +102,21 @@ $StartTime = Get-Date
 $Timestamp = $StartTime.ToString("yyyyMMdd'T'HHmmss")
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-# 関数は lib\*.ps1 に分けてある(spec §14)
+# Functions live in lib\*.ps1 (spec §14)
 foreach ($f in 'Log', 'Settings', 'Project', 'WinPython', 'Zip', 'Gui') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
 
 # ---------------------------------------------------------------------------
-# 本体
+# Main
 # ---------------------------------------------------------------------------
 
 function Invoke-Build {
     param([hashtable]$bound)
     $script:NoPopupEffective = [bool]$NoPopup
 
-    Write-Log "odekake-winpython ビルド開始: $($StartTime.ToString('yyyy-MM-dd HH:mm:ss'))"
+    Write-Log "odekake-winpython build started: $($StartTime.ToString('yyyy-MM-dd HH:mm:ss'))"
     Write-Log "PowerShell $($PSVersionTable.PSVersion)"
 
-    # --- 設定と対象プロジェクト ---
+    # --- Settings and target project ---
     $cfg = Get-EffectiveSettings $bound $SettingTypes $RepoRoot
     $script:NoPopupEffective = $cfg.noPopup
 
@@ -125,72 +125,72 @@ function Invoke-Build {
     } else {
         $selected = Select-ProjectFolder (Resolve-InitialDir $cfg.initialDir)
         if (-not $selected) {
-            Write-Host 'フォルダが選ばれなかったので、何もせず終了します。'
+            Write-Host 'No folder was selected. Exiting without doing anything.'
             $script:Cancelled = $true
             return
         }
         $root = $selected
     }
     $root = $root.TrimEnd('\')
-    Write-Log "対象プロジェクト: $root"
-    if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "対象プロジェクトのフォルダがありません: $root" }
+    Write-Log "Target project: $root"
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "Target project folder not found: $root" }
     foreach ($required in @('pyproject.toml', 'uv.lock')) {
         if (-not (Test-Path -LiteralPath (Join-Path $root $required) -PathType Leaf)) {
-            throw "対象プロジェクトに $required がありません: $root"
+            throw "$required not found in the target project: $root"
         }
     }
 
     foreach ($tool in @('git', 'uv')) {
         if (-not (Get-Command $tool -CommandType Application -ErrorAction SilentlyContinue)) {
-            throw "$tool が見つかりません。インストールして PATH を通してください。"
+            throw "$tool not found. Install it and add it to PATH."
         }
     }
     $insideGit = $false
     try { $insideGit = ((Invoke-Native git @('-C', $root, 'rev-parse', '--is-inside-work-tree') -Capture) -join '') -eq 'true' } catch { }
-    if (-not $insideGit) { throw "対象プロジェクトが git リポジトリではありません(ZIP に入れるファイルを .gitignore で決めるため必要です): $root" }
+    if (-not $insideGit) { throw "The target project is not a git repository (required because .gitignore decides which files go into the ZIP): $root" }
 
-    # --- 名前・バージョン ---
+    # --- Name and version ---
     $py = Read-PyProject (Join-Path $root 'pyproject.toml')
-    if (-not $py.Name) { throw 'pyproject.toml の [project] に name がありません。' }
+    if (-not $py.Name) { throw 'pyproject.toml has no name in [project].' }
     $name = $py.Name -replace '_', '-'
     Open-LogFile $name $LogDir $Timestamp
     $version = Get-ProjectVersion $root $py
     $importName = if ($cfg.importName) { $cfg.importName } else { $py.Name -replace '-', '_' }
-    Write-Log "name: $name / version: $version / import 確認: $importName"
+    Write-Log "name: $name / version: $version / import check: $importName"
 
     $minor = Get-PythonMinor $root $bound['PythonVersion'] $cfg.pythonVersion
     if (-not $WinPythonTable.ContainsKey($minor)) {
-        throw "Python $minor に対応する WinPython は登録されていません。対応: $(($WinPythonTable.Keys | Sort-Object) -join ', ')"
+        throw "No WinPython is registered for Python $minor. Supported: $(($WinPythonTable.Keys | Sort-Object) -join ', ')"
     }
     $winPython = $WinPythonTable[$minor]
 
     $outDir = if ($cfg.outputDir) { Resolve-FullPath $cfg.outputDir } else { Get-DownloadsFolder }
-    if (-not (Test-Path -LiteralPath $outDir -PathType Container)) { throw "出力先フォルダがありません: $outDir" }
+    if (-not (Test-Path -LiteralPath $outDir -PathType Container)) { throw "Output folder not found: $outDir" }
     $zipPath = Join-Path $outDir "$name-${version}_$Timestamp.zip"
-    Write-Log "出力先: $zipPath"
+    Write-Log "Output: $zipPath"
     Write-Log ("groups: [{0}] / extras: [{1}] / exclude: [{2}] / trackedOnly: {3} / includeExportIgnored: {4} / pruneWinPython: {5} / installer: {6} / winPythonArchiveFormat: {7}" -f
         ($cfg.groups -join ', '), ($cfg.extras -join ', '), ($cfg.exclude -join ', '), $cfg.trackedOnly, $cfg.includeExportIgnored,
         $cfg.pruneWinPython, $cfg.installer, $cfg.winPythonArchiveFormat)
     Write-Log "uv: $((Invoke-Native uv @('--version') -Capture) -join ' ')"
 
-    # --- 作業用フォルダ ---
+    # --- Work folder ---
     if (Test-Path -LiteralPath $WorkDir) {
-        Write-Log "前回の作業用フォルダを削除: $WorkDir"
+        Write-Log "Removing the previous work folder: $WorkDir"
         Remove-Item -LiteralPath $WorkDir -Recurse -Force
     }
     $stageDir = Join-Path $WorkDir 'stage'
     New-Item -ItemType Directory -Path $stageDir | Out-Null
 
-    # 7z を作れない PC なら、WinPython のダウンロード前に止める(zip へのフォールバックはしない。spec §16)
+    # If this PC cannot create 7z, stop before downloading WinPython (no fallback to zip; spec §16)
     $tar = Get-SystemTarPath
     if ($cfg.winPythonArchiveFormat -eq '7z') {
         Assert-SevenZipWritable $tar $WorkDir
         Write-Log "tar: $((Invoke-Native $tar @('--version') -Capture) -join ' ')"
     }
 
-    # --- 依存の書き出し ---
-    # uv モードでも行う。WinPython のダウンロード前に lock の不備に気づくためと、入れる依存をログに残すため。
-    Write-Step '依存を書き出す(uv export)'
+    # --- Export dependencies ---
+    # Done in uv mode too: to catch lock problems before downloading WinPython, and to log the dependencies to install.
+    Write-Step 'Exporting dependencies (uv export)'
     $requirements = Join-Path $WorkDir 'requirements.txt'
     $selectArgs = @('--no-default-groups')
     foreach ($g in $cfg.groups) { $selectArgs += @('--group', $g) }
@@ -199,7 +199,7 @@ function Invoke-Build {
     $uvArgs += @('--format', 'requirements-txt', '--output-file', $requirements, '--quiet')
     Invoke-Native uv $uvArgs
     foreach ($line in [System.IO.File]::ReadAllLines($requirements, [System.Text.Encoding]::UTF8)) {
-        # ハッシュの行は長いので省く
+        # Skip the hash lines because they are long
         if ($line -match '^\s*(#|--hash)' -or -not $line.Trim()) { continue }
         Write-Log "  $($line.TrimEnd(' ', '\'))"
     }
@@ -207,21 +207,21 @@ function Invoke-Build {
     if ($cfg.installer -eq 'pip') {
         $nonPyPI = Get-NonPyPIRequirements (Join-Path $root 'uv.lock') $requirements $PyPIIndexUrl
         if ($nonPyPI.Count -gt 0) {
-            throw ("PyPI 以外の index から取る依存があり、installer が pip では入れられません。installer を uv にしてください:`n" +
+            throw ("Some dependencies come from an index other than PyPI, which installer pip cannot install. Set installer to uv:`n" +
                 (($nonPyPI | ForEach-Object { "  $_" }) -join "`n"))
         }
     }
 
     # --- WinPython ---
-    Write-Step "WinPython を用意する(Python $minor)"
+    Write-Step "Preparing WinPython (Python $minor)"
     $archive = Get-WinPythonArchive $winPython $BuildDir
     $wpDir = Join-Path $stageDir 'winpython'
     Expand-WinPython $archive $wpDir $WorkDir
     $python = Join-Path $wpDir 'python\python.exe'
-    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "WinPython に python\python.exe がありません: $python" }
+    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "python\python.exe not found in WinPython: $python" }
 
-    # --- 対象プロジェクトのファイル ---
-    Write-Step '対象プロジェクトのファイルを集める'
+    # --- Target project files ---
+    Write-Step 'Collecting the target project files'
     $files = Get-ProjectFiles $root $cfg.trackedOnly $cfg.exclude $cfg.includeExportIgnored
     foreach ($rel in $files) {
         $src = Join-Path $root ($rel -replace '/', '\')
@@ -231,14 +231,14 @@ function Invoke-Build {
         Copy-Item -LiteralPath $src -Destination $dst
         Write-Log "  $rel"
     }
-    Write-Log "$($files.Count) ファイル"
+    Write-Log "$($files.Count) files"
 
-    # --- 依存のインストール ---
+    # --- Install dependencies ---
     if ($cfg.installer -eq 'uv') {
-        # WinPython の python フォルダを、プロジェクトの環境として uv sync する。
-        # --inexact: lock にないもの(WinPython 同梱の pip, wppm 等)を消さない。
-        # --link-mode copy: uv のキャッシュへのハードリンクにしない。--no-editable: path 依存を開発機のパスで参照させない。
-        Write-Step '依存をインストールする(uv sync)'
+        # uv sync into WinPython's python folder as the project environment.
+        # --inexact: keep packages not in the lock (pip, wppm, etc. bundled with WinPython).
+        # --link-mode copy: no hard links to the uv cache. --no-editable: path dependencies must not refer to paths on the build machine.
+        Write-Step 'Installing dependencies (uv sync)'
         $syncArgs = @('sync', '--project', $root, '--frozen', '--inexact', '--no-install-project') + $selectArgs
         $syncArgs += @('--python', $python, '--link-mode', 'copy', '--no-editable')
         $savedProjectEnv = [Environment]::GetEnvironmentVariable('UV_PROJECT_ENVIRONMENT', 'Process')
@@ -249,49 +249,49 @@ function Invoke-Build {
             [Environment]::SetEnvironmentVariable('UV_PROJECT_ENVIRONMENT', $savedProjectEnv, 'Process')
         }
     } else {
-        Write-Step '依存をインストールする(pip install)'
+        Write-Step 'Installing dependencies (pip install)'
         Invoke-Native $python @('-X', 'utf8', '-m', 'pip', 'install', '--disable-pip-version-check', '--no-warn-script-location', '-r', $requirements)
     }
 
     $sitePackages = Join-Path $wpDir 'python\Lib\site-packages'
     $pthPath = Join-Path $sitePackages $PthFileName
     [System.IO.File]::WriteAllText($pthPath, $PthContent + "`r`n", $Utf8NoBom)
-    Write-Log "$PthFileName を作成: $PthContent"
+    Write-Log "Created ${PthFileName}: $PthContent"
 
-    # --- 動作確認 ---
-    Write-Step '動作確認'
+    # --- Verification ---
+    Write-Step 'Verifying'
     Invoke-Native $python @('--version')
     Invoke-Native $python @('-X', 'utf8', '-m', 'pip', 'check', '--disable-pip-version-check')
-    # -I: カレントフォルダを sys.path に入れない。.pth 経由で import できることを確かめるため。
+    # -I: keep the current folder out of sys.path, to make sure the import works through the .pth file.
     Invoke-Native $python @('-I', '-X', 'utf8', '-c', "import $importName; print('import OK:', $importName.__file__)")
 
-    # --- 不要物の削除 ---
+    # --- Prune ---
     if ($cfg.pruneWinPython) {
-        Write-Step 'WinPython の不要なランチャー等を削除する'
+        Write-Step 'Removing unneeded WinPython launchers and folders'
         foreach ($target in $PruneTargets) {
             $path = Join-Path $wpDir $target
             if (Test-Path -LiteralPath $path) {
                 Remove-Item -LiteralPath $path -Recurse -Force
-                Write-Log "  削除: $target"
+                Write-Log "  Removed: $target"
             } else {
-                Write-Log "  (なし): $target"
+                Write-Log "  (not found): $target"
             }
         }
     }
 
     # --- ZIP ---
-    Write-Step 'ZIP を作る'
+    Write-Step 'Creating the ZIP'
     $winPythonArchiveName = "winpython.$($cfg.winPythonArchiveFormat)"
     $winPythonArchive = Join-Path $WorkDir $winPythonArchiveName
-    Write-Log "$winPythonArchiveName を作成中..."
+    Write-Log "Creating $winPythonArchiveName..."
     if ($cfg.winPythonArchiveFormat -eq '7z') {
         New-SevenZipFromDirectory $winPythonArchive $wpDir $tar
     } else {
         New-ZipFromDirectory $winPythonArchive $wpDir
     }
     Write-Log ("{0}: {1:N1} MB" -f $winPythonArchiveName, ((Get-Item -LiteralPath $winPythonArchive).Length / 1MB))
-    Write-Log "外側 ZIP を作成中..."
-    # winpython.zip / winpython.7z は圧縮済みなので、外側では圧縮しない
+    Write-Log "Creating the outer ZIP..."
+    # winpython.zip / winpython.7z is already compressed, so the outer ZIP stores it without compression
     $outerEntries = @(@{ Name = $winPythonArchiveName; Source = $winPythonArchive; Store = $true })
     foreach ($rel in $files) {
         $outerEntries += @{ Name = $rel; Source = (Join-Path $stageDir ($rel -replace '/', '\')); Store = $false }
@@ -301,20 +301,20 @@ function Invoke-Build {
     $sha256 = Get-Sha256 $zipPath
     $size = (Get-Item -LiteralPath $zipPath).Length
 
-    Write-Step '後片付け'
+    Write-Step 'Cleaning up'
     Remove-Item -LiteralPath $WorkDir -Recurse -Force
-    Write-Log "作業用フォルダを削除: $WorkDir"
+    Write-Log "Removed the work folder: $WorkDir"
 
     $elapsed = (Get-Date) - $StartTime
     Write-Log ''
-    Write-Log '完了しました。' -Color Green
-    Write-Log "出力: $zipPath" -Color Green
-    Write-Log ("サイズ: {0:N0} バイト ({1:N1} MB)" -f $size, ($size / 1MB)) -Color Green
+    Write-Log 'Done.' -Color Green
+    Write-Log "Output: $zipPath" -Color Green
+    Write-Log ("Size: {0:N0} bytes ({1:N1} MB)" -f $size, ($size / 1MB)) -Color Green
     Write-Log "SHA-256: $sha256" -Color Green
-    Write-Log ("所要時間: {0:mm\:ss}" -f $elapsed)
-    Write-Log "ログ: $script:LogPath"
+    Write-Log ("Elapsed: {0:mm\:ss}" -f $elapsed)
+    Write-Log "Log: $script:LogPath"
 
-    $script:ResultText = "出力:`n$zipPath`n`nSHA-256:`n$sha256"
+    $script:ResultText = "Output:`n$zipPath`n`nSHA-256:`n$sha256"
 }
 
 $boundCopy = @{}
@@ -331,7 +331,7 @@ foreach ($key in $EnvOverrides.Keys) {
 $savedOutputEncoding = [Console]::OutputEncoding
 $exitCode = 0
 try {
-    # uv, pip, git(core.quotepath=off)の出力は UTF-8
+    # The output of uv, pip, and git (core.quotepath=off) is UTF-8
     [Console]::OutputEncoding = $Utf8NoBom
     Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
     Invoke-Build $boundCopy
@@ -343,12 +343,12 @@ try {
     $message = $_.Exception.Message
     if (-not $script:LogPath) { Open-LogFile $null $LogDir $Timestamp }
     Write-Log ''
-    Write-Log "失敗しました: $message" -Color Red
+    Write-Log "Failed: $message" -Color Red
     Write-Log ($_.ScriptStackTrace) -Color DarkGray
-    if (Test-Path -LiteralPath $WorkDir) { Write-Log "作業用フォルダは調査用に残しています: $WorkDir" }
-    Write-Log "ログ: $script:LogPath"
+    if (Test-Path -LiteralPath $WorkDir) { Write-Log "The work folder is kept for investigation: $WorkDir" }
+    Write-Log "Log: $script:LogPath"
     if (-not $script:NoPopupEffective) {
-        Show-Popup "$message`n`nログ:`n$script:LogPath" $true
+        Show-Popup "$message`n`nLog:`n$script:LogPath" $true
     }
 } finally {
     [Console]::OutputEncoding = $savedOutputEncoding

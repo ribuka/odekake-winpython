@@ -1,7 +1,7 @@
-﻿# lib\Zip.ps1 のテスト(Pester 5)
+﻿# Tests for lib\Zip.ps1 (Pester 5)
 
 BeforeDiscovery {
-    # tar.exe で 7z を作れない PC(古い Windows など)では、7z のテストを飛ばす
+    # Skip the 7z tests on PCs whose tar.exe cannot create 7z (such as older Windows)
     $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
     $probeDir = Join-Path ([System.IO.Path]::GetTempPath()) ('odekake-7z-probe-{0}' -f [guid]::NewGuid())
     New-Item -ItemType Directory -Path $probeDir | Out-Null
@@ -23,7 +23,7 @@ BeforeAll {
     Mock Write-Log { }
     Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
 
-    # ZIP のエントリを @{ 名前 = エントリ } で返す
+    # Returns the ZIP entries as @{ name = entry }
     function Get-ZipEntries([string]$Path) {
         $zip = [System.IO.Compression.ZipFile]::OpenRead($Path)
         try {
@@ -56,28 +56,28 @@ Describe 'New-ZipFromDirectory' {
         $entries = Get-ZipEntries $zipPath
     }
 
-    It 'エントリ名の区切りは / だけ(フォルダ自体は含めない)' {
+    It 'uses only / in entry names (without the folder itself)' {
         @($entries.Keys | Sort-Object) | Should -Be @('a/b/c.txt', 'empty/inner/', 'top.txt', '日本語/ファイル.txt')
         @($entries.Keys | Where-Object { $_.Contains('\') }).Count | Should -Be 0
     }
 
-    It '空フォルダが入る' {
+    It 'includes empty folders' {
         $entries['empty/inner/'].Length | Should -Be 0
     }
 
-    It '.partial が残らない' {
+    It 'leaves no .partial file' {
         Test-Path -LiteralPath "$zipPath.partial" | Should -BeFalse
     }
 }
 
 Describe 'New-ZipFile' {
     BeforeAll {
-        # よく縮むファイル。Store の有無で圧縮後のサイズが変わるかを見る。
+        # A highly compressible file, to see whether Store changes the compressed size.
         $source = Join-Path $TestDrive 'repeat.txt'
         New-SourceFile $source ('a' * 100000)
     }
 
-    It 'Store のエントリは圧縮せず、それ以外は圧縮する' {
+    It 'stores Store entries without compression and compresses the rest' {
         $zipPath = Join-Path $TestDrive 'store.zip'
         New-ZipFile $zipPath @(
             @{ Name = 'stored.txt'; Source = $source; Store = $true }
@@ -86,12 +86,12 @@ Describe 'New-ZipFile' {
         )
         $entries = Get-ZipEntries $zipPath
         @($entries.Keys | Sort-Object) | Should -Be @('dir/deflated.txt', 'empty/', 'stored.txt')
-        # .NET Framework(5.1)の NoCompression は無圧縮ブロックの deflate になり、元より数バイト大きくなる
+        # NoCompression in .NET Framework (5.1) produces deflate with stored blocks, a few bytes larger than the original
         $entries['stored.txt'].CompressedLength | Should -BeGreaterOrEqual 100000
         $entries['dir/deflated.txt'].CompressedLength | Should -BeLessThan 10000
     }
 
-    It '前回の .partial が残っていても作れる' {
+    It 'works even when a previous .partial file remains' {
         $zipPath = Join-Path $TestDrive 'retry.zip'
         New-SourceFile "$zipPath.partial" 'broken'
         New-ZipFile $zipPath @(@{ Name = 'a.txt'; Source = $source; Store = $false })
@@ -112,20 +112,20 @@ Describe 'New-SevenZipFromDirectory' -Skip:$NoSevenZip {
         New-SevenZipFromDirectory $archive $src $tar
     }
 
-    It '7z の形式で書かれ、圧縮される' {
+    It 'writes the 7z format with compression' {
         $bytes = [System.IO.File]::ReadAllBytes($archive)
         $bytes[0..5] | Should -Be @(0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C)
         $bytes.Length | Should -BeLessThan 10000
     }
 
-    It 'エントリ名は ./ で始まらず、フォルダ自体は含めない' {
-        # tar -tf はコンソールのコードページで出力するので、日本語の名前は比べない(展開して確かめる)
+    It 'does not start entry names with ./ and leaves out the folder itself' {
+        # tar -tf prints in the console code page, so Japanese names are not compared here (checked by extracting)
         $names = @(& $tar -tf $archive | ForEach-Object { $_.TrimEnd('/') })
         $names.Count | Should -Be 7
         @($names | Where-Object { $_ -match '^[\x20-\x7e]+$' } | Sort-Object) | Should -Be @('a b', 'a b/c.txt', 'empty', 'empty/inner', 'top.txt')
     }
 
-    It '展開すると元と同じ中身になる(空フォルダも)' {
+    It 'extracts to the same contents as the original (empty folders included)' {
         $out = Join-Path $TestDrive 'out7'
         New-Item -ItemType Directory -Path $out | Out-Null
         & $tar -C $out -xf $archive
@@ -135,32 +135,32 @@ Describe 'New-SevenZipFromDirectory' -Skip:$NoSevenZip {
         Test-Path -LiteralPath (Join-Path $out 'empty\inner') -PathType Container | Should -BeTrue
     }
 
-    It '.partial が残らない' {
+    It 'leaves no .partial file' {
         Test-Path -LiteralPath "$archive.partial" | Should -BeFalse
     }
 
-    It '空のフォルダはエラー' {
+    It 'fails on an empty folder' {
         $empty = Join-Path $TestDrive 'empty7'
         New-Item -ItemType Directory -Path $empty | Out-Null
-        { New-SevenZipFromDirectory (Join-Path $TestDrive 'empty.7z') $empty $tar } | Should -Throw '7z にするフォルダが空です: *'
+        { New-SevenZipFromDirectory (Join-Path $TestDrive 'empty.7z') $empty $tar } | Should -Throw 'The folder to pack into 7z is empty: *'
     }
 }
 
 Describe 'Assert-SevenZipWritable' {
-    It 'tar.exe がなければエラー' {
-        { Assert-SevenZipWritable (Join-Path $TestDrive 'no\tar.exe') $TestDrive } | Should -Throw '7z を作るための tar.exe がありません: *'
+    It 'fails without tar.exe' {
+        { Assert-SevenZipWritable (Join-Path $TestDrive 'no\tar.exe') $TestDrive } | Should -Throw 'tar.exe, needed to create 7z, not found: *'
     }
 
-    It 'tar.exe が 7z を書けなければエラーにし、試しに作ったものを残さない' {
-        # 7z を書けない tar の代わりに、必ず失敗するコマンドを使う
+    It 'fails when tar.exe cannot write 7z and leaves no test files behind' {
+        # Use a command that always fails in place of a tar that cannot write 7z
         $fakeTar = Join-Path $env:SystemRoot 'System32\where.exe'
         $work = Join-Path $TestDrive 'work-fail'
         New-Item -ItemType Directory -Path $work | Out-Null
-        { Assert-SevenZipWritable $fakeTar $work } | Should -Throw 'この PC の tar.exe では 7z を作れません。*'
+        { Assert-SevenZipWritable $fakeTar $work } | Should -Throw 'tar.exe on this PC cannot create 7z. *'
         @(Get-ChildItem -LiteralPath $work -Force).Count | Should -Be 0
     }
 
-    It '7z を作れれば何も残さない' -Skip:$NoSevenZip {
+    It 'leaves nothing behind when 7z can be created' -Skip:$NoSevenZip {
         $work = Join-Path $TestDrive 'work-ok'
         New-Item -ItemType Directory -Path $work | Out-Null
         Assert-SevenZipWritable (Get-SystemTarPath) $work

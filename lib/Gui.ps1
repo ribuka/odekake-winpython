@@ -1,7 +1,7 @@
-﻿# GUI(ダイアログ・ポップアップ)と出力先の既定値
-# build-offline.ps1 から dot-source される。単体では実行しない。
+﻿# GUI (dialogs and popups) and the default output folder
+# Dot-sourced by build-offline.ps1. Not meant to be run on its own.
 
-# ダイアログがコンソールの裏に隠れないよう、最前面の見えないフォームを親にする。
+# Use an invisible topmost form as the owner so that dialogs do not hide behind the console.
 function New-TopMostOwner {
     Add-Type -AssemblyName System.Windows.Forms
     $owner = New-Object System.Windows.Forms.Form
@@ -15,33 +15,33 @@ function New-TopMostOwner {
     return $owner
 }
 
-# 設定 initialDir の値を、フォルダ選択ダイアログの初期位置にするパスへ直す(spec §8)。
-# 未指定(空)なら $null。環境変数(%USERPROFILE% など)は展開する。
-# 相対パスはエラー(.bat から起動すると基準が分かりにくいため)。存在しなければ警告して $null。
+# Turns the initialDir setting into the path where the folder selection dialog starts (spec §8).
+# Returns $null if not set (empty). Environment variables (such as %USERPROFILE%) are expanded.
+# A relative path is an error (when started from the .bat, its base is unclear). If the folder does not exist, warns and returns $null.
 function Resolve-InitialDir([string]$Value) {
     if (-not $Value) { return $null }
     $path = [Environment]::ExpandEnvironmentVariables($Value)
     if ($path -notmatch '^([A-Za-z]:[\\/]|\\\\)') {
-        throw "設定 'initialDir' は絶対パス(C:\... または \\server\...)にしてください: '$Value'"
+        throw "Setting 'initialDir' must be an absolute path (C:\... or \\server\...): '$Value'"
     }
     if (-not (Test-Path -LiteralPath $path -PathType Container)) {
-        Write-Log "設定 'initialDir' のフォルダがないので、初期位置を指定せずにダイアログを開きます: $path" -Color Yellow
+        Write-Log "The folder in setting 'initialDir' does not exist, so the dialog opens without a start folder: $path" -Color Yellow
         return $null
     }
     return [System.IO.Path]::GetFullPath($path)
 }
 
-# $InitialDir があれば、その中を開いた状態でダイアログを出す。
+# If $InitialDir is given, the dialog opens inside that folder.
 function Select-ProjectFolder([string]$InitialDir) {
     $owner = New-TopMostOwner
     try {
         $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-        $dialog.Description = '持ち出す uv プロジェクトのフォルダ(pyproject.toml があるフォルダ)を選んでください'
+        $dialog.Description = 'Select the folder of the uv project to pack (the folder that contains pyproject.toml)'
         $dialog.ShowNewFolderButton = $false
         if ($dialog.PSObject.Properties['UseDescriptionForTitle']) { $dialog.UseDescriptionForTitle = $true }
         if ($InitialDir) {
-            # .NET 8 以降(PS 7)は InitialDirectory がある。SelectedPath だと親フォルダが開くため、こちらを優先する。
-            # .NET Framework(PS 5.1)は SelectedPath だけ。ツリーがそのフォルダまで展開される。
+            # .NET 8 and later (PS 7) have InitialDirectory. SelectedPath opens the parent folder, so InitialDirectory is preferred.
+            # .NET Framework (PS 5.1) has only SelectedPath. The tree is expanded down to that folder.
             if ($dialog.PSObject.Properties['InitialDirectory']) {
                 $dialog.InitialDirectory = $InitialDir
             } else {
@@ -60,13 +60,13 @@ function Show-Popup([string]$Text, [bool]$IsError) {
         $owner = New-TopMostOwner
         try {
             $icon = if ($IsError) { 'Error' } else { 'Information' }
-            $title = if ($IsError) { 'odekake-winpython: 失敗' } else { 'odekake-winpython: 完了' }
+            $title = if ($IsError) { 'odekake-winpython: Failed' } else { 'odekake-winpython: Done' }
             [System.Windows.Forms.MessageBox]::Show($owner, $Text, $title, 'OK', $icon) | Out-Null
         } finally {
             $owner.Dispose()
         }
     } catch {
-        Write-Log "ポップアップを表示できませんでした: $($_.Exception.Message)" -Color Yellow
+        Write-Log "Could not show the popup: $($_.Exception.Message)" -Color Yellow
     }
 }
 

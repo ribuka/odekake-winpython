@@ -1,59 +1,59 @@
-﻿# 設定の読み込み
-# build-offline.ps1 から dot-source される。単体では実行しない。
+﻿# Loading settings
+# Dot-sourced by build-offline.ps1. Not meant to be run on its own.
 
 function Resolve-FullPath([string]$Path) {
     return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
 }
 
-# $SettingTypes の値から型名を返す。値が配列なら、決まった値だけを受け付ける 'choice'。
+# Returns the type name from a $SettingTypes value. An array value means 'choice', which accepts only the listed values.
 function Get-SettingKind($Type) {
     if ($Type -is [array]) { return 'choice' }
     return $Type
 }
 
-# choice の値を確かめる。大文字小文字も区別する(未知のキーと同じ扱い)。
+# Validates a choice value. Case-sensitive (same as unknown keys).
 function Assert-SettingChoice([string]$Key, $Value, [string[]]$Choices, [string]$Source) {
     if ($Value -isnot [string] -or -not ($Choices -ccontains $Value)) {
         $list = ($Choices | ForEach-Object { '"' + $_ + '"' }) -join ' / '
-        throw "設定 '$Key' は $list のどれかにしてください($Source): '$Value'"
+        throw "Setting '$Key' must be one of $list ($Source): '$Value'"
     }
 }
 
-# 設定ファイルを読み、型を確認して hashtable で返す。ファイルがなければ空。
-# $SettingTypes は キー → 'string' / 'bool' / 'array' / 値の配列(choice) の辞書(build-offline.ps1 の固定値)。
+# Reads a settings file, checks the types, and returns a hashtable. Empty if the file does not exist.
+# $SettingTypes maps each key to 'string' / 'bool' / 'array' / an array of values (choice) (a constant in build-offline.ps1).
 function Read-SettingsFile([string]$Path, [System.Collections.IDictionary]$SettingTypes) {
     $result = @{}
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $result }
-    Write-Log "設定ファイル: $Path"
+    Write-Log "Settings file: $Path"
     $text = [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
     if (-not $text.Trim()) { return $result }
     try {
         $json = $text | ConvertFrom-Json
     } catch {
-        throw "設定ファイルを JSON として読めません: $Path`n$($_.Exception.Message)"
+        throw "Cannot read the settings file as JSON: $Path`n$($_.Exception.Message)"
     }
     if ($json -isnot [System.Management.Automation.PSCustomObject]) {
-        throw "設定ファイルの最上位は { } のオブジェクトにしてください: $Path"
+        throw "The top level of the settings file must be a { } object: $Path"
     }
     foreach ($prop in $json.PSObject.Properties) {
         $key = $prop.Name
         if (-not (@($SettingTypes.Keys) -ccontains $key)) {
-            throw "設定ファイルに未知のキー '$key' があります: $Path`n使えるキー: $($SettingTypes.Keys -join ', ')"
+            throw "Unknown key '$key' in the settings file: $Path`nValid keys: $($SettingTypes.Keys -join ', ')"
         }
         $value = $prop.Value
         switch (Get-SettingKind $SettingTypes[$key]) {
             'choice' { Assert-SettingChoice $key $value $SettingTypes[$key] $Path }
             'string' {
-                if ($value -isnot [string]) { throw "設定 '$key' は文字列にしてください: $Path" }
+                if ($value -isnot [string]) { throw "Setting '$key' must be a string: $Path" }
             }
             'bool' {
-                if ($value -isnot [bool]) { throw "設定 '$key' は true / false にしてください: $Path" }
+                if ($value -isnot [bool]) { throw "Setting '$key' must be true / false: $Path" }
             }
             'array' {
-                if ($value -is [string]) { throw "設定 '$key' は文字列の配列([`"...`"])にしてください: $Path" }
+                if ($value -is [string]) { throw "Setting '$key' must be an array of strings ([`"...`"]): $Path" }
                 $value = @($value)
                 foreach ($item in $value) {
-                    if ($item -isnot [string]) { throw "設定 '$key' の要素は文字列にしてください: $Path" }
+                    if ($item -isnot [string]) { throw "The items of setting '$key' must be strings: $Path" }
                 }
                 $value = [string[]]$value
             }
@@ -63,8 +63,8 @@ function Read-SettingsFile([string]$Path, [System.Collections.IDictionary]$Setti
     return $result
 }
 
-# 既定値 < settings.json < settings.local.json < 引数 の順に、キー単位で上書きする。
-# -ConfigPath がなければ $RepoRoot\config\settings.json を読む。
+# Overrides key by key in the order defaults < settings.json < settings.local.json < arguments.
+# Without -ConfigPath, reads $RepoRoot\config\settings.json.
 function Get-EffectiveSettings([hashtable]$BoundParameters, [System.Collections.IDictionary]$SettingTypes, [string]$RepoRoot) {
     $settings = @{}
     foreach ($key in $SettingTypes.Keys) {
@@ -82,7 +82,7 @@ function Get-EffectiveSettings([hashtable]$BoundParameters, [System.Collections.
         Join-Path $RepoRoot 'config\settings.json'
     }
     if ($BoundParameters.ContainsKey('ConfigPath') -and -not (Test-Path -LiteralPath $configFile -PathType Leaf)) {
-        throw "-ConfigPath で指定された設定ファイルがありません: $configFile"
+        throw "Settings file specified by -ConfigPath not found: $configFile"
     }
     $localFile = Join-Path (Split-Path -Parent $configFile) 'settings.local.json'
 
@@ -94,14 +94,14 @@ function Get-EffectiveSettings([hashtable]$BoundParameters, [System.Collections.
     foreach ($key in $SettingTypes.Keys) {
         $paramName = $key.Substring(0, 1).ToUpper() + $key.Substring(1)
         if (-not $BoundParameters.ContainsKey($paramName)) { continue }
-        # pythonVersion は .python-version との間に優先順位があるので、ここでは引数で上書きしない(Get-PythonMinor)
+        # pythonVersion has a priority relative to .python-version, so the argument does not override it here (see Get-PythonMinor)
         if ($key -eq 'pythonVersion') { continue }
         $value = $BoundParameters[$paramName]
         switch (Get-SettingKind $SettingTypes[$key]) {
-            'choice' { Assert-SettingChoice $key $value $SettingTypes[$key] "引数 -$paramName" }
+            'choice' { Assert-SettingChoice $key $value $SettingTypes[$key] "argument -$paramName" }
             'bool' { $value = [bool]$value }
             'array' {
-                # .bat 経由(-File)だと -Groups a,b が1つの文字列で届くので、カンマで分ける
+                # Through the .bat (-File), -Groups a,b arrives as a single string, so split it on commas
                 $value = [string[]]@($value | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
             }
         }
