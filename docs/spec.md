@@ -27,7 +27,7 @@
 ├─ winpython.zip   ← WinPython + 依存ライブラリ。自分のコードは含まない
 ├─ src\            ← 自分のコード(ファイルのまま。搬入先で編集する可能性あり)
 ├─ pages\
-└─ (その他、対象プロジェクトの gitignore されていないファイル)
+└─ (その他、対象プロジェクトの gitignore されていないファイル。export-ignore のものを除く)
 ```
 
 - **winpython.zip を二重にする理由**: ファイル数の多いランタイムを1ファイルで運ぶため。依存が近い別プロジェクトで流用する可能性もある。
@@ -44,6 +44,10 @@
   - 既定は、gitignore されていない全ファイル(未 add のファイルを含む。`git ls-files --cached --others --exclude-standard` 相当)。(確定)
   - `trackedOnly` で、add 済みのファイルだけに切り替えられる。(確定)
   - `exclude` で、指定したパターンに当たるファイルを除外できる。(確定)
+  - 既定で、対象プロジェクトの `.gitattributes` で `export-ignore` が付いたファイルを除外する(`git archive` と同じ考え方)。`includeExportIgnored` を true にすると含める。(確定、issue #12)
+    - フォルダに付いた `export-ignore`(`/tests/ export-ignore` など)は、中のファイルすべてに効く。
+    - `.gitattributes` は作業ツリーのものを読む(`git archive` の既定はコミット済みのもの)。未 add のファイルも ZIP に入れるため。
+    - 0.1.1 までは export-ignore のファイルも含めていた。既定の挙動が変わる。
 - **外側 ZIP の最上位**: フォルダを挟まず、ZIP 直下にファイルを置く(上の図のとおり)。(確定)
 - **起動用 .bat**: 対象アプリを起動する .bat は生成しない。起動方法はユーザーが搬入先で自分で整える。(確定)
 
@@ -140,6 +144,7 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
 | `pythonVersion` | `-PythonVersion` | 文字列 | `.python-version` の値。優先順位は §5 |
 | `outputDir` | `-OutputDir` | パス | ダウンロードフォルダ |
 | `trackedOnly` | `-TrackedOnly` | 真偽値 | false(未 add のファイルも含める) |
+| `includeExportIgnored` | `-IncludeExportIgnored` | 真偽値 | false(`.gitattributes` で `export-ignore` のファイルは含めない。§2) |
 | `groups` | `-Groups` | 文字列の配列 | 空(dev も含めない) |
 | `extras` | `-Extras` | 文字列の配列 | 空 |
 | `exclude` | `-Exclude` | 文字列の配列 | 空。外側 ZIP から除外するパターン |
@@ -214,6 +219,11 @@ odekake-winpython\
   - 3.13 との違い: `wheelhouse\` がない(prune では「(なし)」になるだけ)。空の `settings\` と `t\` がある(役割が分からないので消さない)。
 - 3.13 dot は packaging 26.2 を同梱している。lock がこれと違う版を指していれば、pip が入れ替える(試験用プロジェクトで 26.3 に入れ替わった)。
 - git pathspec の `:(exclude,glob)` で、`tests` はフォルダごと、`*.log` は最上位だけ、`**/*.log` は全階層に当たる(2026-10-06 確認)。
+- export-ignore の判定(git 2.54.0、2026-10-06 確認):
+  - `git ls-files` は export-ignore を見ない。pathspec の `:(exclude,attr:export-ignore)` はファイル自身の属性だけを見るので、フォルダに付いたものは効かない。
+  - `git check-attr export-ignore` も同じで、`/tests/ export-ignore` のとき `tests/x.py` は unspecified。フォルダを `tests/`(末尾に `/`)で問い合わせると set になる。`tests`(`/` なし)では unspecified。`docs export-ignore`(末尾に `/` なし)は `docs` でも `docs/` でも set。
+  - `git archive` は、export-ignore のフォルダを中身ごと除く。そこで Get-ProjectFiles は、ファイルと、その親フォルダすべて(末尾に `/`)を check-attr で問い合わせ、どれかが set なら除く。
+  - check-attr は未 add のファイルにも効く(パスだけで判定する)。`.gitattributes` 自身に export-ignore を付ければ、それも除かれる。
 
 ## 12. 受け入れ基準と未確認事項
 
@@ -310,7 +320,7 @@ odekake-winpython\
   - Read-PyProject: 通常 / シングルクォート / `dynamic = ["version"]`(複数行を含む)/ `[tool.x]` や `[[tool.uv.index]]` の `name` を拾わない。
   - Get-ProjectVersion: VERSION ファイルの前後の空白・改行を除く / VERSION がない / 2行以上ある。
   - Get-PythonMinor: 引数 > .python-version > 設定ファイル / `3.13.5` や `cpython-3.13` を 3.13 と読む / 引数と .python-version が違うと警告 / どれもないとエラー。
-  - Get-ProjectFiles(一時フォルダで `git init` して作る): 既定は未 add のファイルを含む / `trackedOnly` / `exclude` の `tests`, `*.log`, `**/*.log`(§11 の挙動)/ 削除済みファイルはスキップ / `winpython.zip` や `winpython/` があるとエラー / 日本語のファイル名。
+  - Get-ProjectFiles(一時フォルダで `git init` して作る): 既定は未 add のファイルを含む / `trackedOnly` / `exclude` の `tests`, `*.log`, `**/*.log`(§11 の挙動)/ 削除済みファイルはスキップ / `winpython.zip` や `winpython/` があるとエラー / 日本語のファイル名 / export-ignore(ファイル、フォルダ(`/` 付き・なし)、パターン、未 add のファイル、`.gitattributes` 自身、サブフォルダの `.gitattributes`、`set` 以外の値は除かない)/ `includeExportIgnored` で含める / export-ignore の `winpython.zip` はエラーにしない / `exclude`・`trackedOnly` との併用。
 - Zip.Tests.ps1
   - エントリ名の区切りが `/` だけになる(§13)。空フォルダが入る。`Store` のエントリが無圧縮になる。
 

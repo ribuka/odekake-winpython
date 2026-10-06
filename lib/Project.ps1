@@ -89,20 +89,31 @@ function Get-PythonMinor([string]$Root, [string]$FromArgument, [string]$FromSett
 }
 
 # ZIP に入れるファイルを git で列挙する(対象プロジェクトからの相対パス、区切りは /)。
-function Get-ProjectFiles([string]$Root, [bool]$TrackedOnlyFlag, [string[]]$ExcludePatterns) {
+# $IncludeExportIgnoredFlag が false なら、.gitattributes で export-ignore が付いたファイルを除く(issue #12)。
+function Get-ProjectFiles([string]$Root, [bool]$TrackedOnlyFlag, [string[]]$ExcludePatterns, [bool]$IncludeExportIgnoredFlag) {
     $gitArgs = @('-C', $Root, '-c', 'core.quotepath=off', 'ls-files', '-z', '--cached')
     if (-not $TrackedOnlyFlag) { $gitArgs += @('--others', '--exclude-standard') }
     $gitArgs += @('--', '.')
     foreach ($pattern in $ExcludePatterns) { $gitArgs += ":(exclude,glob)$pattern" }
 
     $out = Invoke-Native git $gitArgs -Capture
-    $files = New-Object System.Collections.Generic.List[string]
+    $candidates = New-Object System.Collections.Generic.List[string]
     foreach ($rel in (($out -join "`n") -split "`0")) {
         if (-not $rel) { continue }
         $full = Join-Path $Root ($rel -replace '/', '\')
         if (-not (Test-Path -LiteralPath $full -PathType Leaf)) {
             # 削除済みでまだコミットしていないファイルや、サブモジュール
             Write-Log "スキップ(ファイルとして存在しない): $rel" -Color Yellow
+            continue
+        }
+        $candidates.Add($rel)
+    }
+
+    $ignored = if ($IncludeExportIgnoredFlag) { $null } else { Get-ExportIgnoredPaths $Root $candidates.ToArray() }
+    $files = New-Object System.Collections.Generic.List[string]
+    foreach ($rel in $candidates) {
+        if ($ignored -and $ignored.Contains($rel)) {
+            Write-Log "除外(export-ignore): $rel"
             continue
         }
         if ($rel -eq 'winpython.zip' -or $rel -like 'winpython/*') {
@@ -112,6 +123,51 @@ function Get-ProjectFiles([string]$Root, [bool]$TrackedOnlyFlag, [string[]]$Excl
     }
     if ($files.Count -eq 0) { throw 'ZIP に入れるファイルが1つもありません。' }
     return , $files.ToArray()
+}
+
+# $Paths(/ 区切りの相対パス)のうち、export-ignore が付いたものを HashSet で返す。親フォルダに付いたものも含む。
+# git check-attr は、フォルダに当たるパターン(/tests/ など)を中のファイルには効かせない。
+# そこで親フォルダも末尾に / を付けて判定し、git archive がフォルダごと除くのと同じ結果にする。
+# .gitattributes は作業ツリーのものを読む(git archive の既定は対象コミットのもの)。未 add のファイルも ZIP に入れるため。
+function Get-ExportIgnoredPaths([string]$Root, [string[]]$Paths) {
+    $ancestors = @{}
+    $queries = New-Object System.Collections.Generic.List[string]
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($rel in $Paths) {
+        $parts = $rel -split '/'
+        $dirs = @(for ($i = 1; $i -lt $parts.Count; $i++) { ($parts[0..($i - 1)] -join '/') + '/' })
+        $ancestors[$rel] = $dirs
+        foreach ($q in $dirs + $rel) { if ($seen.Add($q)) { $queries.Add($q) } }
+    }
+
+    # Invoke-Native は標準入力に対応しないので、--stdin ではなく引数で渡す。
+    # Windows のコマンドラインの長さの上限(32767 文字)に収まるよう、分けて呼ぶ。
+    $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    $chunk = New-Object System.Collections.Generic.List[string]
+    $length = 0
+    $flush = {
+        $out = Invoke-Native git (@('-C', $Root, 'check-attr', '-z', 'export-ignore', '--') + $chunk.ToArray()) -Capture
+        # 出力は「パス NUL 属性名 NUL 値 NUL」の繰り返し。値が set のものだけ除く(git archive と同じ)。
+        $fields = ($out -join "`n") -split "`0"
+        for ($j = 0; $j + 2 -lt $fields.Count; $j += 3) {
+            if ($fields[$j + 2] -eq 'set') { [void]$set.Add($fields[$j]) }
+        }
+        $chunk.Clear()
+    }
+    foreach ($q in $queries) {
+        if ($chunk.Count -gt 0 -and $length + $q.Length -gt 8000) { . $flush; $length = 0 }
+        $chunk.Add($q)
+        $length += $q.Length + 3
+    }
+    if ($chunk.Count -gt 0) { . $flush }
+
+    $result = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($rel in $Paths) {
+        foreach ($q in $ancestors[$rel] + $rel) {
+            if ($set.Contains($q)) { [void]$result.Add($rel); break }
+        }
+    }
+    return , $result
 }
 
 # requirements.txt(uv export の出力)に含まれる依存のうち、uv.lock で PyPI 以外の index(registry)から取るものを返す。

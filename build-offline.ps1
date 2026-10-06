@@ -16,6 +16,7 @@ param(
     [string]$PythonVersion,
     [string]$OutputDir,
     [switch]$TrackedOnly,
+    [switch]$IncludeExportIgnored,
     [string[]]$Groups,
     [string[]]$Extras,
     [string[]]$Exclude,
@@ -58,16 +59,17 @@ $PruneTargets = @(
 # 設定キーと型。引数名はキーの先頭を大文字にしたもの。
 # 型が配列のキーは、その中の値だけを受け付ける(大文字小文字も区別する)。既定値は先頭の値。
 $SettingTypes = [ordered]@{
-    pythonVersion    = 'string'
-    outputDir        = 'string'
-    trackedOnly      = 'bool'
-    groups           = 'array'
-    extras           = 'array'
-    exclude          = 'array'
-    pruneWinPython   = 'bool'
-    importName       = 'string'
-    installer        = @('uv', 'pip')
-    noPopup          = 'bool'
+    pythonVersion        = 'string'
+    outputDir            = 'string'
+    trackedOnly          = 'bool'
+    includeExportIgnored = 'bool'
+    groups               = 'array'
+    extras               = 'array'
+    exclude              = 'array'
+    pruneWinPython       = 'bool'
+    importName           = 'string'
+    installer            = @('uv', 'pip')
+    noPopup              = 'bool'
 }
 
 # pip モードで入れられる index(uv.lock の registry)。これ以外の index の依存があればエラーにする。
@@ -162,8 +164,9 @@ function Invoke-Build {
     if (-not (Test-Path -LiteralPath $outDir -PathType Container)) { throw "出力先フォルダがありません: $outDir" }
     $zipPath = Join-Path $outDir "$name-${version}_$Timestamp.zip"
     Write-Log "出力先: $zipPath"
-    Write-Log ("groups: [{0}] / extras: [{1}] / exclude: [{2}] / trackedOnly: {3} / pruneWinPython: {4} / installer: {5}" -f
-        ($cfg.groups -join ', '), ($cfg.extras -join ', '), ($cfg.exclude -join ', '), $cfg.trackedOnly, $cfg.pruneWinPython, $cfg.installer)
+    Write-Log ("groups: [{0}] / extras: [{1}] / exclude: [{2}] / trackedOnly: {3} / includeExportIgnored: {4} / pruneWinPython: {5} / installer: {6}" -f
+        ($cfg.groups -join ', '), ($cfg.extras -join ', '), ($cfg.exclude -join ', '), $cfg.trackedOnly, $cfg.includeExportIgnored,
+        $cfg.pruneWinPython, $cfg.installer)
     Write-Log "uv: $((Invoke-Native uv @('--version') -Capture) -join ' ')"
 
     # --- 作業用フォルダ ---
@@ -208,7 +211,7 @@ function Invoke-Build {
 
     # --- 対象プロジェクトのファイル ---
     Write-Step '対象プロジェクトのファイルを集める'
-    $files = Get-ProjectFiles $root $cfg.trackedOnly $cfg.exclude
+    $files = Get-ProjectFiles $root $cfg.trackedOnly $cfg.exclude $cfg.includeExportIgnored
     foreach ($rel in $files) {
         $src = Join-Path $root ($rel -replace '/', '\')
         $dst = Join-Path $stageDir ($rel -replace '/', '\')
