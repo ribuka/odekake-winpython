@@ -44,6 +44,7 @@ build-offline.bat -ProjectRoot D:\work\myproject
 | `-Extras a,b` | 含める extras |
 | `-Exclude 'docs/**','tests'` | ZIP から除外するファイル(git pathspec の書式) |
 | `-TrackedOnly` | git に add 済みのファイルだけを入れる |
+| `-IncludeExportIgnored` | `.gitattributes` で `export-ignore` が付いたファイルも入れる(既定では入れない) |
 | `-PythonVersion 3.13` | Python のバージョンを指定(`.python-version` より優先) |
 | `-ImportName <名前>` | 動作確認で import するパッケージ名(既定は pyproject の name) |
 | `-Installer uv` / `-Installer pip` | 依存を入れる方法(既定は `uv`。下の「依存のインストール方法」を参照) |
@@ -123,7 +124,7 @@ odekake-winpython\
 myproject-1.0.0_20261006T120000.zip
 ├─ winpython.zip   ← WinPython と依存ライブラリ
 ├─ src\            ← 自分のコード
-└─ (その他、gitignore されていないファイル)
+└─ (その他、gitignore されていないファイル。`.gitattributes` で export-ignore のものを除く)
 ```
 
 SHA-256 は ZIP には入りません。画面・ポップアップ・ログ(`logs\`)に出るので、必要なら控えてください。

@@ -228,6 +228,79 @@ Describe 'Get-ProjectFiles' {
         $root = New-GitProject -Tracked @() -Untracked @()
         { Get-ProjectFiles $root $false @() } | Should -Throw 'ZIP に入れるファイルが1つもありません。'
     }
+
+    Context 'export-ignore' {
+        BeforeAll {
+            $root = New-GitProject `
+                -Tracked @('.gitattributes', 'keep.py', 'tests/test_a.py', 'tests/sub/test_b.py', 'docs/a.md', 'a/tests/x.py',
+                    'a/docs/y.md', 'debug.log', 'sub/deep.log', 'only.txt', 'value.txt', 'unset.txt', 'pkg/.gitattributes', 'pkg/gen.py', 'pkg/main.py') `
+                -Untracked @('tests/new_test.py', 'new.log', '日本語/除外.txt')
+            # /tests/ は最上位のフォルダだけ、docs(/ なし)はどの階層のフォルダにも当たる
+            Write-TextFile (Join-Path $root '.gitattributes') @"
+/tests/ export-ignore
+docs export-ignore
+*.log export-ignore
+/only.txt export-ignore
+/value.txt export-ignore=yes
+/unset.txt -export-ignore
+.gitattributes export-ignore
+/日本語/ export-ignore
+"@
+            Write-TextFile (Join-Path $root 'pkg\.gitattributes') "gen.py export-ignore`n"
+        }
+
+        It '既定では export-ignore のファイル・フォルダを含めない' {
+            $files = Get-ProjectFiles $root $false @()
+            @($files | Sort-Object) | Should -Be @('a/tests/x.py', 'keep.py', 'pkg/main.py', 'unset.txt', 'value.txt')
+        }
+
+        It 'includeExportIgnored では含める' {
+            $files = Get-ProjectFiles $root $false @() $true
+            $files | Should -Contain 'tests/sub/test_b.py'
+            $files | Should -Contain 'tests/new_test.py'
+            $files | Should -Contain 'a/docs/y.md'
+            $files | Should -Contain '.gitattributes'
+            $files | Should -Contain 'pkg/gen.py'
+            $files | Should -Contain '日本語/除外.txt'
+            $files.Count | Should -Be 18
+        }
+
+        It '除いたファイルをログに出す' {
+            $null = Get-ProjectFiles $root $false @()
+            Should -Invoke Write-Log -Times 1 -Exactly -ParameterFilter { $Message -eq '除外(export-ignore): tests/sub/test_b.py' }
+            Should -Invoke Write-Log -Times 1 -Exactly -ParameterFilter { $Message -eq '除外(export-ignore): 日本語/除外.txt' }
+        }
+
+        It 'trackedOnly・exclude と併用できる' {
+            $files = Get-ProjectFiles $root $true @('keep.py')
+            @($files | Sort-Object) | Should -Be @('a/tests/x.py', 'pkg/main.py', 'unset.txt', 'value.txt')
+        }
+    }
+
+    It 'export-ignore の winpython.zip は衝突のエラーにしない' {
+        $root = New-GitProject -Tracked @('a.txt') -Untracked @('winpython.zip', 'winpython/readme.txt')
+        Write-TextFile (Join-Path $root '.gitattributes') "winpython.zip export-ignore`n/winpython/ export-ignore`n"
+        $files = Get-ProjectFiles $root $false @()
+        @($files | Sort-Object) | Should -Be @('.gitattributes', 'a.txt')
+    }
+
+    It 'すべて export-ignore ならエラー' {
+        $root = New-GitProject -Tracked @('.gitattributes', 'a.txt')
+        Write-TextFile (Join-Path $root '.gitattributes') "* export-ignore`n"
+        { Get-ProjectFiles $root $false @() } | Should -Throw 'ZIP に入れるファイルが1つもありません。'
+    }
+
+    It 'パスが多くても分けて問い合わせる' {
+        $names = @(1..400 | ForEach-Object { 'dir_{0:d3}/file_with_a_long_name_{0:d3}.txt' -f $_ })
+        $root = New-GitProject -Tracked @('.gitattributes') -Untracked $names
+        Write-TextFile (Join-Path $root '.gitattributes') "/dir_400/ export-ignore`n*7.txt export-ignore`n"
+        $files = Get-ProjectFiles $root $false @()
+        $files.Count | Should -Be 360
+        $files | Should -Not -Contain 'dir_400/file_with_a_long_name_400.txt'
+        $files | Should -Not -Contain 'dir_007/file_with_a_long_name_007.txt'
+        # Invoke-Native はコマンドラインを Write-Log に出す
+        Should -Invoke Write-Log -ParameterFilter { $Message -like '> git * check-attr *' } -Times 2
+    }
 }
 
 Describe 'Get-NonPyPIRequirements' {
