@@ -1,11 +1,11 @@
-﻿# WinPython の取得と展開
-# build-offline.ps1 から dot-source される。単体では実行しない。
+﻿# Downloading and extracting WinPython
+# Dot-sourced by build-offline.ps1. Not meant to be run on its own.
 
 function Get-Sha256([string]$Path) {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
-# $BuildDir\downloads にキャッシュした WinPython の zip を返す。ハッシュが合わなければ取り直す。
+# Returns the WinPython zip cached in $BuildDir\downloads. Downloads it again if the hash does not match.
 function Get-WinPythonArchive([hashtable]$Entry, [string]$BuildDir) {
     $downloadDir = Join-Path $BuildDir 'downloads'
     if (-not (Test-Path -LiteralPath $downloadDir)) { New-Item -ItemType Directory -Path $downloadDir | Out-Null }
@@ -14,15 +14,15 @@ function Get-WinPythonArchive([hashtable]$Entry, [string]$BuildDir) {
 
     if (Test-Path -LiteralPath $path -PathType Leaf) {
         if ((Get-Sha256 $path) -eq $Entry.Sha256) {
-            Write-Log "キャッシュを使います: $path"
+            Write-Log "Using the cache: $path"
             return $path
         }
-        Write-Log "キャッシュの SHA-256 が一致しないため、ダウンロードし直します: $path" -Color Yellow
+        Write-Log "The SHA-256 of the cache does not match. Downloading again: $path" -Color Yellow
         Remove-Item -LiteralPath $path -Force
     }
 
-    Write-Log "ダウンロード: $($Entry.Url)"
-    Write-Log "保存先: $path"
+    Write-Log "Downloading: $($Entry.Url)"
+    Write-Log "Saving to: $path"
     if ($PSVersionTable.PSVersion.Major -lt 6) {
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
     }
@@ -32,22 +32,22 @@ function Get-WinPythonArchive([hashtable]$Entry, [string]$BuildDir) {
     $actual = Get-Sha256 $partial
     if ($actual -ne $Entry.Sha256) {
         Remove-Item -LiteralPath $partial -Force
-        throw "ダウンロードした WinPython の SHA-256 が一致しません。`n期待値: $($Entry.Sha256)`n実際: $actual"
+        throw "The SHA-256 of the downloaded WinPython does not match.`nExpected: $($Entry.Sha256)`nActual: $actual"
     }
     Move-Item -LiteralPath $partial -Destination $path
     return $path
 }
 
-# WinPython を $WorkDir\extract に展開し、最上位フォルダ(WPy64-xxxx)を取り除いて $Destination に置く。
+# Extracts WinPython into $WorkDir\extract, strips the top-level folder (WPy64-xxxx), and places it at $Destination.
 function Expand-WinPython([string]$Archive, [string]$Destination, [string]$WorkDir) {
     $extractDir = Join-Path $WorkDir 'extract'
-    Write-Log "展開: $Archive"
+    Write-Log "Extracting: $Archive"
     [System.IO.Compression.ZipFile]::ExtractToDirectory($Archive, $extractDir)
     $top = @(Get-ChildItem -LiteralPath $extractDir -Force)
     if ($top.Count -ne 1 -or -not $top[0].PSIsContainer) {
-        throw "WinPython の zip の最上位がフォルダ1つではありません: $Archive"
+        throw "The top level of the WinPython zip is not a single folder: $Archive"
     }
-    Write-Log "最上位フォルダ $($top[0].Name) を取り除いて、winpython\ に置きます"
+    Write-Log "Stripping the top-level folder $($top[0].Name) and placing it at winpython\"
     Move-Item -LiteralPath $top[0].FullName -Destination $Destination
     Remove-Item -LiteralPath $extractDir -Force
 }

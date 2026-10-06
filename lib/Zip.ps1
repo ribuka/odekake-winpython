@@ -1,10 +1,10 @@
-﻿# ZIP の作成
-# build-offline.ps1 から dot-source される。単体では実行しない。
+﻿# Creating ZIP files
+# Dot-sourced by build-offline.ps1. Not meant to be run on its own.
 
-# ZIP を作る。$Entries は @{ Name = 'a/b.txt'; Source = 'C:\....txt'; Store = $false } の配列。
-# Source が $null のものは空フォルダ(Name は / で終わる)。
-# エントリ名の区切りは必ず / にする。5.1(.NET Framework)の ZipFile.CreateFromDirectory は \ を使うため使わない。
-# 途中で失敗しても半端な ZIP が残らないよう、.partial に書いてから名前を変える。
+# Creates a ZIP. $Entries is an array of @{ Name = 'a/b.txt'; Source = 'C:\...\b.txt'; Store = $false }.
+# An entry whose Source is $null is an empty folder (Name ends with /).
+# Entry names always use / as the separator. ZipFile.CreateFromDirectory in 5.1 (.NET Framework) uses \, so it is not used.
+# Writes to .partial and then renames it, so that a failure does not leave a broken ZIP behind.
 function New-ZipFile([string]$Path, [object[]]$Entries) {
     $partial = "$Path.partial"
     if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
@@ -29,7 +29,7 @@ function New-ZipFile([string]$Path, [object[]]$Entries) {
     Move-Item -LiteralPath $partial -Destination $Path
 }
 
-# フォルダの中身を、フォルダ自体は含めずに ZIP にする(空フォルダも含める)。
+# Zips the contents of a folder without the folder itself (empty folders included).
 function New-ZipFromDirectory([string]$Path, [string]$SourceDir) {
     $base = (Get-Item -LiteralPath $SourceDir).FullName.TrimEnd('\') + '\'
     $entries = foreach ($item in Get-ChildItem -LiteralPath $SourceDir -Recurse -Force) {
@@ -45,17 +45,17 @@ function New-ZipFromDirectory([string]$Path, [string]$SourceDir) {
     New-ZipFile $Path @($entries)
 }
 
-# 7z の作成には Windows 標準の tar.exe(bsdtar / libarchive)を使う(spec §16)。
-# PATH の tar は Git for Windows の GNU tar のことがあり、7z を書けないので System32 のものに固定する。
+# 7z files are created with the tar.exe that comes with Windows (bsdtar / libarchive) (spec §16).
+# The tar on PATH may be GNU tar from Git for Windows, which cannot write 7z, so the one in System32 is used.
 function Get-SystemTarPath {
     return Join-Path $env:SystemRoot 'System32\tar.exe'
 }
 
-# フォルダの中身を、フォルダ自体は含めずに 7z(LZMA2)にする(空フォルダも含める)。
-# tar に . を渡すとエントリ名が ./ で始まるので、最上位の項目を名前で並べて渡す。
+# Packs the contents of a folder into a 7z (LZMA2) without the folder itself (empty folders included).
+# Passing . to tar makes entry names start with ./, so the top-level items are passed by name.
 function New-SevenZipFromDirectory([string]$Path, [string]$SourceDir, [string]$Tar) {
     $names = @(Get-ChildItem -LiteralPath $SourceDir -Force | ForEach-Object { $_.Name })
-    if ($names.Count -eq 0) { throw "7z にするフォルダが空です: $SourceDir" }
+    if ($names.Count -eq 0) { throw "The folder to pack into 7z is empty: $SourceDir" }
     $partial = "$Path.partial"
     if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
     $tarArgs = @('-C', $SourceDir, '--format', '7zip', '--options', '7zip:compression=lzma2', '-cf', $partial) + $names
@@ -63,11 +63,11 @@ function New-SevenZipFromDirectory([string]$Path, [string]$SourceDir, [string]$T
     Move-Item -LiteralPath $partial -Destination $Path
 }
 
-# tar.exe で 7z を作れるかを、小さな 7z を試しに作って確かめる。作れなければ例外。
-# 古い Windows の tar.exe は 7z(LZMA2)を書けないことがある(推測)ので、WinPython のダウンロード前に確かめる。
+# Checks that tar.exe can create 7z by creating a small test 7z. Throws if it cannot.
+# tar.exe on older Windows may not be able to write 7z (LZMA2) (unverified), so this is checked before downloading WinPython.
 function Assert-SevenZipWritable([string]$Tar, [string]$WorkDir) {
     if (-not (Test-Path -LiteralPath $Tar -PathType Leaf)) {
-        throw "7z を作るための tar.exe がありません: $Tar`nwinPythonArchiveFormat を zip にしてください。"
+        throw "tar.exe, needed to create 7z, not found: $Tar`nSet winPythonArchiveFormat to zip."
     }
     $probeDir = Join-Path $WorkDir '7z-probe'
     $probe7z = Join-Path $WorkDir '7z-probe.7z'
@@ -77,7 +77,7 @@ function Assert-SevenZipWritable([string]$Tar, [string]$WorkDir) {
         try {
             New-SevenZipFromDirectory $probe7z $probeDir $Tar
         } catch {
-            throw "この PC の tar.exe では 7z を作れません。winPythonArchiveFormat を zip にしてください。`n$($_.Exception.Message)"
+            throw "tar.exe on this PC cannot create 7z. Set winPythonArchiveFormat to zip.`n$($_.Exception.Message)"
         }
     } finally {
         foreach ($p in @($probeDir, $probe7z, "$probe7z.partial")) {
