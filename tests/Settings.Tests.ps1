@@ -38,6 +38,7 @@ Describe 'Get-EffectiveSettings' {
         $cfg.pruneWinPython | Should -BeFalse
         , $cfg.groups | Should -BeOfType [string[]]
         $cfg.groups.Count | Should -Be 0
+        $cfg.installer | Should -BeExactly 'uv'
     }
 
     It '-ConfigPath がなければ RepoRoot\config\settings.json を読む' {
@@ -78,6 +79,22 @@ Describe 'Get-EffectiveSettings' {
         $root = New-ConfigDir (Join-Path $TestDrive 'pyver') '{ "pythonVersion": "3.12" }' $null
         $cfg = Get-EffectiveSettings @{ PythonVersion = '3.14' } $SettingTypes $root
         $cfg.pythonVersion | Should -Be '3.12'
+    }
+
+    It 'installer は設定ファイルと引数で切り替えられる' {
+        $root = New-ConfigDir (Join-Path $TestDrive 'installer') '{ "installer": "pip" }' $null
+        (Get-EffectiveSettings @{} $SettingTypes $root).installer | Should -BeExactly 'pip'
+        (Get-EffectiveSettings @{ Installer = 'uv' } $SettingTypes $root).installer | Should -BeExactly 'uv'
+    }
+
+    It '引数の installer が不正ならエラー: <Value>' -ForEach @(
+        @{ Value = 'conda' }
+        @{ Value = 'UV' }
+        @{ Value = '' }
+    ) {
+        $root = Join-Path $TestDrive 'none'
+        { Get-EffectiveSettings @{ Installer = $Value } $SettingTypes $root } |
+            Should -Throw "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください(引数 -Installer)*"
     }
 
     It '-ConfigPath のファイルがないとエラー' {
@@ -124,6 +141,10 @@ Describe 'Read-SettingsFile' {
         @{ Json = '{ "groups": "dev" }'; Message = "*設定 'groups' は文字列の配列*" }
         @{ Json = '{ "groups": [1] }'; Message = "*設定 'groups' の要素は文字列にしてください*" }
         @{ Json = '{ "pythonVersion": 3.13 }'; Message = "*設定 'pythonVersion' は文字列にしてください*" }
+        @{ Json = '{ "installer": "conda" }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
+        @{ Json = '{ "installer": "Pip" }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
+        @{ Json = '{ "installer": ["uv"] }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
+        @{ Json = '{ "installer": null }'; Message = "*設定 'installer' は `"uv`" / `"pip`" のどれかにしてください*" }
     ) {
         { Read-Json $Json } | Should -Throw $Message
     }

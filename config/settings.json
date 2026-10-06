@@ -1,3 +1,4 @@
 {
-  "pruneWinPython": true
+  "pruneWinPython": true,
+  "installer": "uv"
 }

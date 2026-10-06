@@ -21,6 +21,7 @@ param(
     [string[]]$Exclude,
     [switch]$PruneWinPython,
     [string]$ImportName,
+    [string]$Installer,
     [switch]$NoPopup
 )
 
@@ -55,6 +56,7 @@ $PruneTargets = @(
 )
 
 # 設定キーと型。引数名はキーの先頭を大文字にしたもの。
+# 型が配列のキーは、その中の値だけを受け付ける(大文字小文字も区別する)。既定値は先頭の値。
 $SettingTypes = [ordered]@{
     pythonVersion    = 'string'
     outputDir        = 'string'
@@ -64,8 +66,12 @@ $SettingTypes = [ordered]@{
     exclude          = 'array'
     pruneWinPython   = 'bool'
     importName       = 'string'
+    installer        = @('uv', 'pip')
     noPopup          = 'bool'
 }
+
+# pip モードで入れられる index(uv.lock の registry)。これ以外の index の依存があればエラーにする。
+$PyPIIndexUrl = 'https://pypi.org/simple'
 
 $PthFileName = 'odekake-src.pth'
 $PthContent  = '..\..\..\..\src'
@@ -156,8 +162,9 @@ function Invoke-Build {
     if (-not (Test-Path -LiteralPath $outDir -PathType Container)) { throw "出力先フォルダがありません: $outDir" }
     $zipPath = Join-Path $outDir "$name-${version}_$Timestamp.zip"
     Write-Log "出力先: $zipPath"
-    Write-Log ("groups: [{0}] / extras: [{1}] / exclude: [{2}] / trackedOnly: {3} / pruneWinPython: {4}" -f
-        ($cfg.groups -join ', '), ($cfg.extras -join ', '), ($cfg.exclude -join ', '), $cfg.trackedOnly, $cfg.pruneWinPython)
+    Write-Log ("groups: [{0}] / extras: [{1}] / exclude: [{2}] / trackedOnly: {3} / pruneWinPython: {4} / installer: {5}" -f
+        ($cfg.groups -join ', '), ($cfg.extras -join ', '), ($cfg.exclude -join ', '), $cfg.trackedOnly, $cfg.pruneWinPython, $cfg.installer)
+    Write-Log "uv: $((Invoke-Native uv @('--version') -Capture) -join ' ')"
 
     # --- 作業用フォルダ ---
     if (Test-Path -LiteralPath $WorkDir) {
@@ -168,13 +175,28 @@ function Invoke-Build {
     New-Item -ItemType Directory -Path $stageDir | Out-Null
 
     # --- 依存の書き出し ---
+    # uv モードでも行う。WinPython のダウンロード前に lock の不備に気づくためと、入れる依存をログに残すため。
     Write-Step '依存を書き出す(uv export)'
     $requirements = Join-Path $WorkDir 'requirements.txt'
-    $uvArgs = @('export', '--project', $root, '--frozen', '--no-emit-project', '--no-default-groups')
-    foreach ($g in $cfg.groups) { $uvArgs += @('--group', $g) }
-    foreach ($e in $cfg.extras) { $uvArgs += @('--extra', $e) }
+    $selectArgs = @('--no-default-groups')
+    foreach ($g in $cfg.groups) { $selectArgs += @('--group', $g) }
+    foreach ($e in $cfg.extras) { $selectArgs += @('--extra', $e) }
+    $uvArgs = @('export', '--project', $root, '--frozen', '--no-emit-project') + $selectArgs
     $uvArgs += @('--format', 'requirements-txt', '--output-file', $requirements, '--quiet')
     Invoke-Native uv $uvArgs
+    foreach ($line in [System.IO.File]::ReadAllLines($requirements, [System.Text.Encoding]::UTF8)) {
+        # ハッシュの行は長いので省く
+        if ($line -match '^\s*(#|--hash)' -or -not $line.Trim()) { continue }
+        Write-Log "  $($line.TrimEnd(' ', '\'))"
+    }
+
+    if ($cfg.installer -eq 'pip') {
+        $nonPyPI = Get-NonPyPIRequirements (Join-Path $root 'uv.lock') $requirements $PyPIIndexUrl
+        if ($nonPyPI.Count -gt 0) {
+            throw ("PyPI 以外の index から取る依存があり、installer が pip では入れられません。installer を uv にしてください:`n" +
+                (($nonPyPI | ForEach-Object { "  $_" }) -join "`n"))
+        }
+    }
 
     # --- WinPython ---
     Write-Step "WinPython を用意する(Python $minor)"
@@ -198,8 +220,24 @@ function Invoke-Build {
     Write-Log "$($files.Count) ファイル"
 
     # --- 依存のインストール ---
-    Write-Step '依存をインストールする(pip install)'
-    Invoke-Native $python @('-X', 'utf8', '-m', 'pip', 'install', '--disable-pip-version-check', '--no-warn-script-location', '-r', $requirements)
+    if ($cfg.installer -eq 'uv') {
+        # WinPython の python フォルダを、プロジェクトの環境として uv sync する。
+        # --inexact: lock にないもの(WinPython 同梱の pip, wppm 等)を消さない。
+        # --link-mode copy: uv のキャッシュへのハードリンクにしない。--no-editable: path 依存を開発機のパスで参照させない。
+        Write-Step '依存をインストールする(uv sync)'
+        $syncArgs = @('sync', '--project', $root, '--frozen', '--inexact', '--no-install-project') + $selectArgs
+        $syncArgs += @('--python', $python, '--link-mode', 'copy', '--no-editable')
+        $savedProjectEnv = [Environment]::GetEnvironmentVariable('UV_PROJECT_ENVIRONMENT', 'Process')
+        [Environment]::SetEnvironmentVariable('UV_PROJECT_ENVIRONMENT', (Join-Path $wpDir 'python'), 'Process')
+        try {
+            Invoke-Native uv $syncArgs
+        } finally {
+            [Environment]::SetEnvironmentVariable('UV_PROJECT_ENVIRONMENT', $savedProjectEnv, 'Process')
+        }
+    } else {
+        Write-Step '依存をインストールする(pip install)'
+        Invoke-Native $python @('-X', 'utf8', '-m', 'pip', 'install', '--disable-pip-version-check', '--no-warn-script-location', '-r', $requirements)
+    }
 
     $sitePackages = Join-Path $wpDir 'python\Lib\site-packages'
     $pthPath = Join-Path $sitePackages $PthFileName
