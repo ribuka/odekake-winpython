@@ -117,15 +117,19 @@ function Get-ProjectFiles([string]$Root, [bool]$TrackedOnlyFlag, [string[]]$Excl
 # requirements.txt(uv export の出力)に含まれる依存のうち、uv.lock で PyPI 以外の index(registry)から取るものを返す。
 # pip は requirements.txt の index を知らないので、pip モードでは入れられない(issue #10)。
 # 返り値は "name==version (index の URL)" の配列。uv.lock は TOML パーサーがないため、行単位で読む。
+# 環境マーカーで index を切り替えると、同じ name==version が registry 違いで複数ある。
+# requirements.txt からはどれが選ばれたか分からないので、1つでも PyPI 以外があれば返す(安全側に倒す)。
 function Get-NonPyPIRequirements([string]$LockPath, [string]$RequirementsPath, [string]$PyPIIndexUrl) {
     $normalize = { param([string]$n) ($n -replace '[-_.]+', '-').ToLowerInvariant() }
 
-    # uv.lock の [[package]] ごとに、name / version / registry を集める
+    # uv.lock の [[package]] ごとに、name / version / registry を集める(キーごとに registry の一覧)
     $registries = @{}
     $current = $null
     $flush = {
         if ($current -and $current.Name -and $current.Registry) {
-            $registries["$(& $normalize $current.Name)==$($current.Version)"] = $current.Registry
+            $key = "$(& $normalize $current.Name)==$($current.Version)"
+            if (-not $registries.ContainsKey($key)) { $registries[$key] = New-Object System.Collections.Generic.List[string] }
+            $registries[$key].Add($current.Registry)
         }
     }
     foreach ($line in [System.IO.File]::ReadAllLines($LockPath, [System.Text.Encoding]::UTF8)) {
@@ -142,12 +146,15 @@ function Get-NonPyPIRequirements([string]$LockPath, [string]$RequirementsPath, [
     . $flush
 
     $result = New-Object System.Collections.Generic.List[string]
+    $seen = @{}
     foreach ($line in [System.IO.File]::ReadAllLines($RequirementsPath, [System.Text.Encoding]::UTF8)) {
         if ($line -notmatch '^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;\\]+)') { continue }
         $key = "$(& $normalize $Matches[1])==$($Matches[2])"
-        if (-not $registries.ContainsKey($key)) { continue }
-        $registry = $registries[$key]
-        if ($registry.TrimEnd('/') -ne $PyPIIndexUrl.TrimEnd('/')) { $result.Add("$key ($registry)") }
+        if (-not $registries.ContainsKey($key) -or $seen.ContainsKey($key)) { continue }
+        $seen[$key] = $true
+        foreach ($registry in $registries[$key]) {
+            if ($registry.TrimEnd('/') -ne $PyPIIndexUrl.TrimEnd('/')) { $result.Add("$key ($registry)") }
+        }
     }
     return , $result.ToArray()
 }

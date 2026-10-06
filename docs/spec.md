@@ -371,6 +371,7 @@ uv sync --project <対象> --frozen --inexact --no-install-project --no-default-
 
 ### pip モードの事前検査(確定、2026-10-06)
 - `uv export` の直後(WinPython のダウンロード前)に、requirements.txt の各依存(`name==version`)を uv.lock の `[[package]]` と照合する。`source = { registry = "..." }` が `https://pypi.org/simple` 以外なら、該当する依存を並べてエラーにする(`Get-NonPyPIRequirements`)。
+- 環境マーカーで index を切り替えると、uv.lock に同じ `name==version` が registry 違いで複数入る。requirements.txt からはどれが選ばれたか分からないため、1つでも PyPI 以外があればエラーにする(安全側。Windows 以外向けの非公開 index でも止まる)。(PR #11 のレビューで判明)
 - requirements.txt に出ない依存(選ばなかった group など)は見ない。名前は PEP 503 の正規化(`[-_.]+` → `-`、小文字)で照合する。URL の末尾の `/` は区別しない。
 - pyproject の `[[tool.uv.index]]` は正規表現で確実に読めない恐れがあるため、uv.lock を見る。
 - PyPI のミラーを既定の index にしている環境(`UV_DEFAULT_INDEX` など)では、PyPI のパッケージでもエラーになる。(推測。未検証) その場合は uv モードを使う。

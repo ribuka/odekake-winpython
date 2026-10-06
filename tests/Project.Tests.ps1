@@ -275,6 +275,22 @@ version = "2.32.3"
 source = { registry = "https://pypi.org/simple" }
 
 [[package]]
+name = "idna"
+version = "3.10"
+source = { registry = "https://hoge.example/simple" }
+resolution-markers = [
+    "sys_platform == 'win32'",
+]
+
+[[package]]
+name = "idna"
+version = "3.10"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "sys_platform != 'win32'",
+]
+
+[[package]]
 name = "local-pkg"
 version = "0.1.0"
 source = { directory = "../local-pkg" }
@@ -305,6 +321,12 @@ requests==2.32.3 ; python_full_version >= '3.13' \
         $result = Get-NonPyPIRequirements $lock $req $pypi
         , $result | Should -BeOfType [string[]]
         $result.Count | Should -Be 0
+    }
+
+    It '同じ name==version が registry 違いで複数あれば、PyPI 以外のものを1回だけ返す' {
+        $req = Write-Requirements "idna==3.10 ; sys_platform == 'win32' \`n    --hash=sha256:22`nidna==3.10 ; sys_platform != 'win32'`n"
+        $result = Get-NonPyPIRequirements $lock $req $pypi
+        $result | Should -Be @('idna==3.10 (https://hoge.example/simple)')
     }
 
     It 'URL の末尾の / は区別しない' {
