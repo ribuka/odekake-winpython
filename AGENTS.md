@@ -9,16 +9,19 @@ A general-purpose Python script (Windows only) that packages any uv project into
 
 - `build_offline.py` / `build-offline.bat`: Entry points. The `.bat` launches the script with `uv run`.
 - `odekake/*.py`: Implementation modules (settings, project inspection, WinPython, ZIP, logging, GUI).
-- `pyproject.toml` / `uv.lock`: The tool's own Python requirement and dev dependencies (pytest). No runtime dependencies.
+- `pyproject.toml` / `uv.lock`: The tool's own Python requirement and dependencies (runtime: loguru; dev: pytest, ruff).
 - `config/settings.json`: Shared default settings. Per-user overrides go in `config/settings.local.json` (gitignored).
 - `tests/test_*.py`: pytest unit tests.
+- `.github/workflows/ci.yml`: CI (ruff check and pytest on Ubuntu) for pull requests.
 - `docs/spec.md`: Specification. `docs/issues.md`: Open issues and pending ideas.
 - `VERSION`: Release version. Pushing a change to it on `main` triggers the release workflow.
 
 ## Coding
 
-- Use only the standard library at runtime, and keep the code working on Python 3.11 and later.
+- Do not add runtime dependencies other than loguru, and keep the code working on Python 3.11 and later.
+- Run `uv run ruff check` and `uv run ruff format --check` before committing. Keep ruff's default rules.
 - Run `uv run pytest` after changing `build_offline.py` or `odekake/*.py`, and add or update tests for the changed behavior. The tests must not require network access.
+- CI runs the tests on Ubuntu. Mark tests that need Windows (tar.exe, Windows paths, tkinter dialogs, running python.exe) with `pytest.mark.skipif(sys.platform != "win32", ...)`; write the rest to pass on Ubuntu too.
 - Write user-facing text (log output, console messages, exception messages, GUI text), code comments, docstrings, argument help, and test names in English.
 - `README.md`, `docs/spec.md`, and `docs/issues.md` are written in Japanese. Keep them in Japanese.
 

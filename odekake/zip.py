@@ -20,11 +20,13 @@ def new_zip_file(path: str, entries: list[ZipEntry]) -> None:
 
     Writes to .partial and then renames it, so that a failure does not leave a broken ZIP behind.
     """
-    partial = path + '.partial'
+    partial = path + ".partial"
     if os.path.exists(partial):
         os.remove(partial)
     # strict_timestamps=False: files dated before 1980 get 1980-01-01 instead of failing
-    with zipfile.ZipFile(partial, 'x', compression=zipfile.ZIP_DEFLATED, strict_timestamps=False) as zf:
+    with zipfile.ZipFile(
+        partial, "x", compression=zipfile.ZIP_DEFLATED, strict_timestamps=False
+    ) as zf:
         for entry in entries:
             if entry.source is None:
                 zf.mkdir(entry.name)
@@ -39,8 +41,8 @@ def new_zip_from_directory(path: str, source_dir: str) -> None:
     entries = []
     for current, dirs, files in os.walk(source_dir):
         dirs.sort()
-        rel_dir = os.path.relpath(current, source_dir).replace('\\', '/')
-        prefix = '' if rel_dir == '.' else rel_dir + '/'
+        rel_dir = os.path.relpath(current, source_dir).replace("\\", "/")
+        prefix = "" if rel_dir == "." else rel_dir + "/"
         if prefix and not dirs and not files:
             entries.append(ZipEntry(prefix, None))
         for name in sorted(files):
@@ -53,7 +55,9 @@ def get_system_tar_path() -> str:
 
     The tar on PATH may be GNU tar from Git for Windows, which cannot write 7z, so the one in System32 is used.
     """
-    return os.path.join(os.environ.get('SystemRoot', r'C:\Windows'), 'System32', 'tar.exe')
+    return os.path.join(
+        os.environ.get("SystemRoot", r"C:\Windows"), "System32", "tar.exe"
+    )
 
 
 def new_seven_zip_from_directory(path: str, source_dir: str, tar: str) -> None:
@@ -63,11 +67,24 @@ def new_seven_zip_from_directory(path: str, source_dir: str, tar: str) -> None:
     """
     names = sorted(os.listdir(source_dir))
     if not names:
-        raise BuildError(f'The folder to pack into 7z is empty: {source_dir}')
-    partial = path + '.partial'
+        raise BuildError(f"The folder to pack into 7z is empty: {source_dir}")
+    partial = path + ".partial"
     if os.path.exists(partial):
         os.remove(partial)
-    log.run(tar, ['-C', source_dir, '--format', '7zip', '--options', '7zip:compression=lzma2', '-cf', partial, *names])
+    log.run(
+        tar,
+        [
+            "-C",
+            source_dir,
+            "--format",
+            "7zip",
+            "--options",
+            "7zip:compression=lzma2",
+            "-cf",
+            partial,
+            *names,
+        ],
+    )
     os.rename(partial, path)
 
 
@@ -77,19 +94,23 @@ def assert_seven_zip_writable(tar: str, work_dir: str) -> None:
     tar.exe on older Windows may not be able to write 7z (LZMA2) (unverified), so this is checked before downloading WinPython.
     """
     if not os.path.isfile(tar):
-        raise BuildError(f'tar.exe, needed to create 7z, not found: {tar}\nSet winPythonArchiveFormat to zip.')
-    probe_dir = os.path.join(work_dir, '7z-probe')
-    probe_7z = os.path.join(work_dir, '7z-probe.7z')
+        raise BuildError(
+            f"tar.exe, needed to create 7z, not found: {tar}\nSet winPythonArchiveFormat to zip."
+        )
+    probe_dir = os.path.join(work_dir, "7z-probe")
+    probe_7z = os.path.join(work_dir, "7z-probe.7z")
     os.makedirs(probe_dir, exist_ok=True)
     try:
-        with open(os.path.join(probe_dir, 'probe.txt'), 'w', encoding='utf-8') as f:
-            f.write('probe')
+        with open(os.path.join(probe_dir, "probe.txt"), "w", encoding="utf-8") as f:
+            f.write("probe")
         try:
             new_seven_zip_from_directory(probe_7z, probe_dir, tar)
         except BuildError as e:
-            raise BuildError(f'tar.exe on this PC cannot create 7z. Set winPythonArchiveFormat to zip.\n{e}') from e
+            raise BuildError(
+                f"tar.exe on this PC cannot create 7z. Set winPythonArchiveFormat to zip.\n{e}"
+            ) from e
     finally:
         remove_tree(probe_dir)
-        for p in (probe_7z, probe_7z + '.partial'):
+        for p in (probe_7z, probe_7z + ".partial"):
             if os.path.exists(p):
                 os.remove(p)

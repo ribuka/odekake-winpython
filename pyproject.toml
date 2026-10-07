@@ -4,11 +4,14 @@ name = "odekake-winpython"
 version = "0"
 description = "Packs a uv project into a ZIP bundled with WinPython, for use on offline Windows machines."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["loguru>=0.7.3"]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "ruff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+# Default rules and formatting (line length 88). The target version comes from requires-python.

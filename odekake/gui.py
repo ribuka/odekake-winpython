@@ -10,7 +10,7 @@ from odekake import BuildError, log
 
 def _expand_environment_variables(value: str) -> str:
     """Expands %NAME% like Windows does. Undefined variables are left as they are ($NAME is not expanded)."""
-    return re.sub(r'%([^%]+)%', lambda m: os.environ.get(m.group(1), m.group(0)), value)
+    return re.sub(r"%([^%]+)%", lambda m: os.environ.get(m.group(1), m.group(0)), value)
 
 
 def resolve_initial_dir(value: str | None) -> str | None:
@@ -23,12 +23,14 @@ def resolve_initial_dir(value: str | None) -> str | None:
     if not value:
         return None
     path = _expand_environment_variables(value)
-    if not re.match(r'^([A-Za-z]:[\\/]|\\\\)', path):
-        raise BuildError(f"Setting 'initialDir' must be an absolute path (C:\\... or \\\\server\\...): '{value}'")
+    if not re.match(r"^([A-Za-z]:[\\/]|\\\\)", path):
+        raise BuildError(
+            f"Setting 'initialDir' must be an absolute path (C:\\... or \\\\server\\...): '{value}'"
+        )
     if not os.path.isdir(path):
         log.write_log(
             f"The folder in setting 'initialDir' does not exist, so the dialog opens without a start folder: {path}",
-            color='yellow',
+            color="yellow",
         )
         return None
     return os.path.abspath(path)
@@ -41,18 +43,18 @@ def select_project_folder(initial_dir: str | None) -> str | None:
         from tkinter import filedialog
     except ImportError as e:
         raise BuildError(
-            'tkinter is not available in this Python, so the folder selection dialog cannot be shown. '
-            'Specify the folder with --project-root.'
+            "tkinter is not available in this Python, so the folder selection dialog cannot be shown. "
+            "Specify the folder with --project-root."
         ) from e
     # A hidden topmost window is the owner, so that the dialog does not hide behind the console
     root = tkinter.Tk()
     try:
         root.withdraw()
-        root.attributes('-topmost', True)
+        root.attributes("-topmost", True)
         root.update()
         selected = filedialog.askdirectory(
             parent=root,
-            title='Select the folder of the uv project to pack (the folder that contains pyproject.toml)',
+            title="Select the folder of the uv project to pack (the folder that contains pyproject.toml)",
             initialdir=initial_dir or None,
             mustexist=True,
         )
@@ -71,22 +73,24 @@ _MB_TOPMOST = 0x40000
 def show_popup(text: str, is_error: bool) -> None:
     try:
         icon = _MB_ICONERROR if is_error else _MB_ICONINFORMATION
-        title = 'odekake-winpython: Failed' if is_error else 'odekake-winpython: Done'
-        ctypes.windll.user32.MessageBoxW(None, text, title, _MB_OK | icon | _MB_SETFOREGROUND | _MB_TOPMOST)
+        title = "odekake-winpython: Failed" if is_error else "odekake-winpython: Done"
+        ctypes.windll.user32.MessageBoxW(
+            None, text, title, _MB_OK | icon | _MB_SETFOREGROUND | _MB_TOPMOST
+        )
     except (AttributeError, OSError) as e:
-        log.write_log(f'Could not show the popup: {e}', color='yellow')
+        log.write_log(f"Could not show the popup: {e}", color="yellow")
 
 
 class _GUID(ctypes.Structure):
     _fields_ = [
-        ('Data1', ctypes.c_uint32),
-        ('Data2', ctypes.c_uint16),
-        ('Data3', ctypes.c_uint16),
-        ('Data4', ctypes.c_ubyte * 8),
+        ("Data1", ctypes.c_uint32),
+        ("Data2", ctypes.c_uint16),
+        ("Data3", ctypes.c_uint16),
+        ("Data4", ctypes.c_ubyte * 8),
     ]
 
 
-_FOLDERID_DOWNLOADS = uuid.UUID('374DE290-123F-4565-9164-39C4925E467B')
+_FOLDERID_DOWNLOADS = uuid.UUID("374DE290-123F-4565-9164-39C4925E467B")
 
 
 def get_downloads_folder() -> str:
@@ -95,13 +99,20 @@ def get_downloads_folder() -> str:
     path_ptr = ctypes.c_void_p()
     shell32 = ctypes.windll.shell32
     shell32.SHGetKnownFolderPath.argtypes = [
-        ctypes.POINTER(_GUID), ctypes.c_uint32, ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p)
+        ctypes.POINTER(_GUID),
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_void_p),
     ]
     shell32.SHGetKnownFolderPath.restype = ctypes.c_long
-    hr = shell32.SHGetKnownFolderPath(ctypes.byref(guid), 0, None, ctypes.byref(path_ptr))
+    hr = shell32.SHGetKnownFolderPath(
+        ctypes.byref(guid), 0, None, ctypes.byref(path_ptr)
+    )
     try:
         if hr != 0:
-            raise OSError(f'SHGetKnownFolderPath failed (HRESULT 0x{hr & 0xFFFFFFFF:08X})')
+            raise OSError(
+                f"SHGetKnownFolderPath failed (HRESULT 0x{hr & 0xFFFFFFFF:08X})"
+            )
         return ctypes.wstring_at(path_ptr.value)
     finally:
         ctypes.windll.ole32.CoTaskMemFree(path_ptr)

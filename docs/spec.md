@@ -123,7 +123,7 @@ SHA-256 は、GitHub API の digest と https://winpython.github.io/md5_sha1.txt
 - SHA-256 は画面に表示し、ログにも記録する。用途は、持ち出し申請の書類に値を記載し、搬入先で `Get-FileHash` と照合すること。表示は `Get-FileHash` と同じ大文字の16進。
 - ZIP の中に各ファイルのハッシュ一覧(SHA256SUMS)は入れない。
 - ログ: このリポジトリの `logs\yyyymmddTHHmmss_<name>.log`。SHA-256 に加え、ビルド全体のログを書く。ログは持ち出さない。
-- ログは自前の関数(`log.write_log`)で、コンソールとログファイルの両方に書く。外部コマンド(uv, pip など)の出力も、受け取ってログに書き出す。
+- ログは `loguru` で、コンソール(stderr)とログファイル(UTF-8)の両方に書く(`log.write_log`)。ログファイルの名前に `<name>` が要るので、pyproject を読むまではメモリにためておき、ログファイルを開くときにまとめて書き出す。コンソールの色は、コンソールに出すときだけ付ける(リダイレクトしたときは付けない)。外部コマンド(uv, pip など)の出力も、受け取ってログに書き出す。
 
 ## 8. 設定(確定)
 
@@ -206,7 +206,8 @@ odekake-winpython\
 ├─ build_offline.py / build-offline.bat
 ├─ odekake\*.py                  ← build_offline.py から使うモジュール(§14)
 ├─ tests\test_*.py               ← pytest の単体テスト(§14)。リリースの zip には入れない(export-ignore)
-├─ pyproject.toml / uv.lock      ← このツール自身の Python と開発用の依存(pytest)
+├─ pyproject.toml / uv.lock      ← このツール自身の Python と依存(実行時は loguru、開発用は pytest と ruff)
+├─ .github\workflows\ci.yml     ← PR ごとに ubuntu で ruff check と pytest を実行する
 ├─ config\settings.json          ← コミットする
 ├─ config\settings.local.json    ← gitignore
 ├─ logs\                         ← gitignore
@@ -297,10 +298,10 @@ spec に書かれていなかったため、実装時に決めたもの。変更
 odekake-winpython\
 ├─ build_offline.py         ← 引数、固定値、本体(Build.run)、終了処理だけ
 ├─ build-offline.bat
-├─ pyproject.toml           ← requires-python >= 3.11、実行時の依存なし、[dependency-groups] dev = ["pytest"]、[build-system] なし
+├─ pyproject.toml           ← requires-python >= 3.11、実行時の依存は loguru だけ、[dependency-groups] dev = ["pytest", "ruff"]、[tool.ruff](既定のまま)、[build-system] なし
 ├─ odekake\
 │  ├─ __init__.py           ← BuildError(利用者に見せるエラー), remove_tree
-│  ├─ log.py                ← write_log, write_step, open_log_file, run(外部コマンド)
+│  ├─ log.py                ← start, write_log, write_step, open_log_file, run(外部コマンド)
 │  ├─ settings.py           ← resolve_full_path, read_settings_file, get_effective_settings
 │  ├─ project.py            ← read_pyproject, get_project_version, get_python_minor, get_project_files, get_export_ignored_paths, get_non_pypi_requirements(§15)
 │  ├─ winpython.py          ← get_sha256, get_winpython_archive, expand_winpython
@@ -308,6 +309,7 @@ odekake-winpython\
 │  └─ gui.py                ← resolve_initial_dir, select_project_folder, show_popup, get_downloads_folder
 └─ tests\
    ├─ conftest.py           ← log.write_log を差し替えて、ログに出た文言を確かめられるようにする
+   ├─ test_log.py
    ├─ test_settings.py
    ├─ test_project.py
    ├─ test_zip.py
@@ -316,6 +318,7 @@ odekake-winpython\
 - 固定値(`WINPYTHON_TABLE`, `PRUNE_TARGETS`, `SETTING_TYPES`, `OPTION_NAMES`, `PTH_FILE_NAME`, `PTH_CONTENT`, `ENV_OVERRIDES`)は `build_offline.py` の先頭に置く。WinPython の版を上げるときに見る場所を1か所にするため。
 - `odekake\` のモジュールは `from odekake import log` として `log.write_log` / `log.run` を呼ぶ。テストで差し替えられるようにするため。
 - ソースは UTF-8(BOM なし)で保存する。
+- コードは ruff(ルールと書式は既定のまま。ruff 0.16 の既定には DTZ、BLE などの規則も入る)の `ruff check` と `ruff format --check` を通す。
 
 ### テストに入れるケース
 - test_settings.py(一時フォルダに settings.json / settings.local.json を書いて呼ぶ)
@@ -336,11 +339,15 @@ odekake-winpython\
   - エントリ名の区切りが `/` だけになる(§13)。空フォルダが入る。`store` のエントリが無圧縮になる。前回の `.partial` が残っていても作れる。
   - 7z: 形式と圧縮、エントリ名が `./` で始まらない、展開すると元と同じ、空のフォルダはエラー。tar.exe が 7z を作れない PC では飛ばす。
   - assert_seven_zip_writable: tar.exe がない / 7z を作れない(試験用のファイルを残さない)/ 作れる(何も残さない)。
+- test_log.py
+  - ログファイルを開くまでの行をためておき、開いたときに書き出す。以降はファイルに追記する。行の先頭に時刻が付く。
+  - run: コマンド行と出力をログに書く / capture では stdout を返し stderr だけをログに書く / 標準入力と環境変数を渡す / 終了コードが 0 以外だとエラー / 実行できないとエラー。
 - test_gui.py(ダイアログは出さない)
   - resolve_initial_dir: 未指定は None / 存在するフォルダはそのまま(正規化する)/ 環境変数を展開する(`$NAME` は展開しない)/ ないフォルダやファイルは警告して None / 相対パスはエラー。
 
 ### 前提
 - テストは pytest で書く。`uv run pytest` で実行する(README に書く)。
+- CI(`.github/workflows/ci.yml`)は ubuntu で動く。Windows でしか動かない処理(`tar.exe`、Windows のパス、tkinter のダイアログ、`python.exe` の実行など)に依存するテストには `pytest.mark.skipif(sys.platform != "win32", ...)` を付ける。ほかのテストは ubuntu でも通るように書く。
 - テストはネットワークを使わない(git はローカルのリポジトリにだけ使う)。
 - test_project.py の get_project_files は、`GIT_CONFIG_GLOBAL` を空のファイルに、`GIT_CONFIG_NOSYSTEM=1` にして呼ぶ。利用者のグローバルな除外設定などに結果が左右されないため。
 
@@ -455,14 +462,15 @@ issue #22。実装を PowerShell から Python に移した。対象プロジェ
 
 ### 方式(確定)
 - ビルドする PC は Windows のまま。成果物は Windows 専用の WinPython を含み、ビルド時に `python.exe` を実行して確かめる(§4 手順 7・9)ため。
-- 実行時の依存は標準ライブラリだけ。`tomllib` を使うので Python 3.11 以上。インタープリターは uv が用意する。
+- 実行時の依存は `loguru` だけ。ほかは標準ライブラリで書く。`tomllib` を使うので Python 3.11 以上。インタープリターは uv が用意する。
+- 開発用の依存は pytest と ruff。PR ごとに CI(ubuntu)で ruff check と pytest を実行する。
 - 引数はケバブケースにした(§8 の表)。既存の呼び出し(`-ProjectRoot` など)とは互換がないため、バージョンを 0.2.0 に上げた。
 - 設定ファイル(`config\settings.json`、`settings.local.json`)のキー名と意味は変えていない。
 - 個別の置き換え:
   - フォルダ選択ダイアログ: `tkinter.filedialog.askdirectory`(§3)。
   - ポップアップ: `ctypes` で Win32 の `MessageBoxW`(tkinter に頼らない)。
   - ダウンロードフォルダ: `ctypes` で `SHGetKnownFolderPath`(PowerShell 版と同じ API)。
-  - ログ: `Start-Transcript` を使わず、自前の関数でコンソールとログファイルに書く(§7)。
+  - ログ: `Start-Transcript` の代わりに `loguru` で、コンソール(stderr)とログファイルに書く(§7)。
   - 外部コマンド: `subprocess` に引数をリストで渡す。終了コードは毎回確かめる。
   - pyproject.toml / uv.lock: `tomllib`。PowerShell 版にあった「`name` / `version` が1行の文字列で書かれている前提」の制限はなくなった。
   - ZIP: `zipfile`。7z: 従来どおり System32 の `tar.exe`。SHA-256: `hashlib`。ダウンロード: `urllib.request`。
@@ -478,8 +486,10 @@ issue #22。実装を PowerShell から Python に移した。対象プロジェ
   - 所要時間は、既定の設定で PowerShell 版が約 13 秒、Python 版が約 22 秒だった(1回ずつの計測)。
 - Python 版の4つの成果物を、日本語と空白を含むパスに展開し(外側と winpython.zip は `Expand-Archive`、winpython.7z は `tar.exe -xf`)、`python -I -c "import <パッケージ>, requests, pip"` が通った。日本語のファイル名も正しく展開された。
 - エラー系(git でない、未知のキー、未対応の Python、VERSION なし、installer の値が不正、対象フォルダなし)のメッセージは、引数の名前(`-Installer` → `--installer` など)以外は PowerShell 版と一致した。終了コードは 1。
+- issue の案どおり `--project "%~dp0"` と書いた .bat では、`\"` がエスケープとして読まれ、`--project` の値が「`<リポジトリ>" --no-dev python ... --project-root D:\x`」とコマンド行の残り全部になって失敗した。`"%~dp0."` にした(§9)。
 - `build-offline.bat` を別のフォルダからコマンドで呼び、引数(`--groups dev` など)が渡ること、ビルドが成功すること、失敗時に終了コード 1 が返ること、`pause` することを確かめた。
 - ダウンロードフォルダの取得(`SHGetKnownFolderPath`)は、シェルの `shell:Downloads` と同じパスを返した。
-- `uv run pytest` は、Python 3.13.12 と 3.11.15 の両方で 105 件すべて成功した。
+- `uv run pytest` は、Python 3.13.12 と 3.11.15 の両方で 105 件すべて成功した(ログを loguru に移す前)。
+- ログを loguru に移したあと(レビュー後の修正): `uv run pytest` は 113 件すべて成功、`ruff check` と `ruff format --check` も成功した。既定の設定でもう一度ビルドし、ログファイルの内容が移す前のビルドと一致すること(時刻・パス・SHA-256 などを除く)、ログファイルが UTF-8 であることを確かめた。
 - WinPython のダウンロード(`get_winpython_archive` を単体で呼んだ。3.14 の zip): ダウンロードして SHA-256 が一致した。2回目はキャッシュを使った。キャッシュを1バイト壊すと、ダウンロードし直した。
 - 未確認: `build-offline.bat` のダブルクリックで出るフォルダ選択ダイアログ(tkinter)と、完了・失敗のポップアップの表示(目視が必要)。

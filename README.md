@@ -210,8 +210,12 @@ Get-FileHash .\myproject-1.0.0_20261006T120000.zip -Algorithm SHA256
 
 `odekake\*.py` の一部に、pytest の単体テストがあります(`tests\`)。WinPython のダウンロードもネットワークも使わず、数秒で終わります。`git` は使います。
 
-リポジトリのフォルダで次を実行します(初回は uv が pytest を入れます)。
+リポジトリのフォルダで次を実行します(初回は uv が pytest と ruff を入れます)。
 
 ```powershell
 uv run pytest
+uv run ruff check
+uv run ruff format --check
 ```
+
+PR では、GitHub Actions(ubuntu)で `ruff check` と pytest が走ります。Windows でしか動かないテストは、ubuntu では飛ばします。
