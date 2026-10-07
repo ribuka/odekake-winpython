@@ -1,0 +1,17 @@
+[project]
+name = "odekake-winpython"
+# Not used. The release version is in the VERSION file (this tool is not installed as a package).
+version = "0"
+description = "Packs a uv project into a ZIP bundled with WinPython, for use on offline Windows machines."
+requires-python = ">=3.11"
+dependencies = ["loguru>=0.7.3"]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+# Default rules and formatting (line length 88). The target version comes from requires-python.

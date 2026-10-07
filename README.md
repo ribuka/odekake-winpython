@@ -7,8 +7,9 @@ Python の実行環境には WinPython(dot 版)を使い、依存ライブラリ
 
 ## 必要なもの(ZIP を作る PC)
 
-- Windows の PowerShell 5.1 または 7
+- Windows
 - `git` と `uv` に PATH が通っていること
+  - スクリプト自体は Python(3.11 以上)で書かれていますが、Python は uv が用意するので、別に入れる必要はありません。
 - インターネット接続(初回に WinPython をダウンロードするため。2回目以降は `.build\` のキャッシュを使います)
 
 ## 対象プロジェクトの条件
@@ -16,7 +17,7 @@ Python の実行環境には WinPython(dot 版)を使い、依存ライブラリ
 - `pyproject.toml` と `uv.lock` がある
 - git リポジトリである
 - 自分のコードが `src\` の下にある(`[build-system]` を持つ構成)
-- `build-offline.ps1` の `$WinPythonTable` に載っている版(現在は 3.12 / 3.13 / 3.14 など)を使う(`.python-version` などで指定)。ほかの版は URL と SHA-256 を追加すれば使える
+- `build_offline.py` の `WINPYTHON_TABLE` に載っている版(現在は 3.12 / 3.13 / 3.14 など)を使う(`.python-version` などで指定)。ほかの版は URL と SHA-256 を追加すれば使える
 
 ## 使い方
 
@@ -31,29 +32,50 @@ Python の実行環境には WinPython(dot 版)を使い、依存ライブラリ
 ### コマンドで実行する
 
 ```bat
-build-offline.bat -ProjectRoot D:\work\myproject
+build-offline.bat --project-root D:\work\myproject
 ```
 
 主なオプション:
 
 | オプション | 説明 |
 |---|---|
-| `-ProjectRoot <フォルダ>` | 対象プロジェクト。省略するとフォルダ選択ダイアログが出ます |
-| `-OutputDir <フォルダ>` | 出力先(既存のフォルダを指定) |
-| `-Groups a,b` | 含める依存グループ。既定では dev も含めません |
-| `-Extras a,b` | 含める extras |
-| `-Exclude 'docs/**','tests'` | ZIP から除外するファイル(git pathspec の書式) |
-| `-TrackedOnly` | git に add 済みのファイルだけを入れる |
-| `-IncludeExportIgnored` | `.gitattributes` で `export-ignore` が付いたファイルも入れる(既定では入れない) |
-| `-PythonVersion 3.13` | Python のバージョンを指定(`.python-version` より優先) |
-| `-ImportName <名前>` | 動作確認で import するパッケージ名(既定は pyproject の name) |
-| `-Installer uv` / `-Installer pip` | 依存を入れる方法(既定は `uv`。下の「依存のインストール方法」を参照) |
-| `-WinPythonArchiveFormat zip` / `-WinPythonArchiveFormat 7z` | WinPython を入れるアーカイブの形式(既定は `zip`。下の「WinPython のアーカイブ形式」を参照) |
-| `-NoPopup` | 終了時のポップアップを出さない |
+| `--project-root <フォルダ>` | 対象プロジェクト。省略するとフォルダ選択ダイアログが出ます |
+| `--output-dir <フォルダ>` | 出力先(既存のフォルダを指定) |
+| `--groups a b` | 含める依存グループ。既定では dev も含めません |
+| `--extras a b` | 含める extras |
+| `--exclude "docs/**" tests` | ZIP から除外するファイル(git pathspec の書式) |
+| `--tracked-only` | git に add 済みのファイルだけを入れる |
+| `--include-export-ignored` | `.gitattributes` で `export-ignore` が付いたファイルも入れる(既定では入れない) |
+| `--python-version 3.13` | Python のバージョンを指定(`.python-version` より優先) |
+| `--import-name <名前>` | 動作確認で import するパッケージ名(既定は pyproject の name) |
+| `--installer uv` / `--installer pip` | 依存を入れる方法(既定は `uv`。下の「依存のインストール方法」を参照) |
+| `--winpython-archive-format zip` / `--winpython-archive-format 7z` | WinPython を入れるアーカイブの形式(既定は `zip`。下の「WinPython のアーカイブ形式」を参照) |
+| `--prune-winpython` / `--no-prune-winpython` | WinPython の不要なファイルを削除する / しない(下の「WinPython の不要なファイルの削除」を参照) |
+| `--no-popup` | 終了時のポップアップを出さない |
+
+- `--groups` などの複数の値は、`--groups a b`、`--groups a --groups b`、`--groups a,b` のどれでも指定できます。
+- 真偽値のオプションは、`--tracked-only` / `--no-tracked-only` のように、`--no-` を付けると設定ファイルの値を打ち消せます。
+- すべてのオプションは `build-offline.bat --help` で確認できます。
+
+0.1.x(PowerShell 版)からは、オプションの名前が変わりました(`-ProjectRoot` → `--project-root` など)。設定ファイルはそのまま使えます。
 
 ### 設定ファイル
 
-毎回同じオプションを使う場合は、設定ファイルに書けます。キー名はオプション名の先頭を小文字にしたものです。
+毎回同じオプションを使う場合は、設定ファイルに書けます。キー名は次のとおりです(オプション名とは書き方が違います)。
+
+| キー | オプション |
+|---|---|
+| `outputDir` | `--output-dir` |
+| `groups` / `extras` / `exclude` | `--groups` / `--extras` / `--exclude` |
+| `trackedOnly` | `--tracked-only` |
+| `includeExportIgnored` | `--include-export-ignored` |
+| `pythonVersion` | `--python-version` |
+| `importName` | `--import-name` |
+| `installer` | `--installer` |
+| `winPythonArchiveFormat` | `--winpython-archive-format` |
+| `pruneWinPython` | `--prune-winpython` |
+| `noPopup` | `--no-popup` |
+| `initialDir` | (なし) |
 
 - `config\settings.json` … 共通の設定(コミットされるので個人のパスは書かない)
 - `config\settings.local.json` … 個人用の設定(git の管理外)
@@ -119,8 +141,7 @@ pip では、PyPI 以外の index にあるパッケージは入りません。�
 - 削除する: `Jupyter Lab.exe`, `Jupyter Notebook.exe`, `Spyder.exe`, `Spyder reset.exe`, `VS Code.exe`, `notebooks\`, `wheelhouse\`
 - 残す: `python\`, `scripts\`, `IDLE (Python GUI).exe`, `WinPython Command Prompt.exe` など
 
-削除したくないときは、`config\settings.local.json` に `"pruneWinPython": false` と書きます。
-(`build-offline.bat` に `-PruneWinPython:$false` を付けると、エラーになります。)
+削除したくないときは、`config\settings.local.json` に `"pruneWinPython": false` と書くか、`--no-prune-winpython` を付けます。
 
 ### WinPython のキャッシュ
 
@@ -139,7 +160,7 @@ odekake-winpython\
 
 そのため、この zip は別の場所(NAS など)に控えておくことを勧めます。
 控えた zip を `.build\downloads\` に同じファイル名で置けば、ダウンロードせずに使います。
-ファイル名は、`build-offline.ps1` の `$WinPythonTable` にある URL の末尾と同じです。
+ファイル名は、`build_offline.py` の `WINPYTHON_TABLE` にある URL の末尾と同じです。
 置いたファイルが正しいかは SHA-256 で照合し、一致しなければダウンロードし直します。
 
 ## 出力される ZIP
@@ -187,18 +208,14 @@ Get-FileHash .\myproject-1.0.0_20261006T120000.zip -Algorithm SHA256
 
 ## テスト(このリポジトリを修正する人向け)
 
-`lib\*.ps1` の一部に、Pester 5 の単体テストがあります(`tests\`)。WinPython のダウンロードもネットワークも使わず、数秒で終わります。`git` は使います。
+`odekake\*.py` の一部に、pytest の単体テストがあります(`tests\`)。WinPython のダウンロードもネットワークも使わず、数秒で終わります。`git` は使います。
 
-Windows 標準の Pester は 3.4 で、このテストは動きません。初回だけ Pester 5 を入れてください(PowerShell 5.1 と 7 は別々に入れる必要があります)。
-
-```powershell
-# PowerShell 5.1 では、先に NuGet プロバイダーが要ることがあります
-Install-PackageProvider NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force
-Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -MaximumVersion 5.99
-```
-
-リポジトリのフォルダで次を実行します。
+リポジトリのフォルダで次を実行します(初回は uv が pytest と ruff を入れます)。
 
 ```powershell
-Invoke-Pester tests
+uv run pytest
+uv run ruff check
+uv run ruff format --check
 ```
+
+PR では、GitHub Actions(ubuntu)で `ruff check` と pytest が走ります。Windows でしか動かないテストは、ubuntu では飛ばします。
