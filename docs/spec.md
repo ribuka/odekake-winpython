@@ -464,7 +464,7 @@ issue #22。実装を PowerShell から Python に移した。対象プロジェ
 - ビルドする PC は Windows のまま。成果物は Windows 専用の WinPython を含み、ビルド時に `python.exe` を実行して確かめる(§4 手順 7・9)ため。
 - 実行時の依存は `loguru` だけ。ほかは標準ライブラリで書く。`tomllib` を使うので Python 3.11 以上。インタープリターは uv が用意する。
 - 開発用の依存は pytest と ruff。PR ごとに CI(ubuntu)で ruff check と pytest を実行する。
-- 引数はケバブケースにした(§8 の表)。既存の呼び出し(`-ProjectRoot` など)とは互換がないため、バージョンを 0.2.0 に上げた。
+- 引数はケバブケースにした(§8 の表)。既存の呼び出し(`-ProjectRoot` など)とは互換がないため、バージョンを 0.2.0 に上げる(移行とは別の PR で行う)。
 - 設定ファイル(`config\settings.json`、`settings.local.json`)のキー名と意味は変えていない。
 - 個別の置き換え:
   - フォルダ選択ダイアログ: `tkinter.filedialog.askdirectory`(§3)。
