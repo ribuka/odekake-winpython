@@ -1,24 +1,25 @@
 # odekake-winpython
 
-A general-purpose PowerShell script that packages any uv project into a ZIP, based on WinPython, for carrying it into an offline Windows environment.
+A general-purpose Python script (Windows only) that packages any uv project into a ZIP, based on WinPython, for carrying it into an offline Windows environment.
 
 - Always respond in Japanese.
 - `docs/spec.md` is the source of truth for behavior. Read the relevant sections before changing code.
 
 ## Repository layout
 
-- `build-offline.ps1` / `build-offline.bat`: Entry points. The `.bat` launches the script with Windows PowerShell 5.1.
-- `lib/*.ps1`: Implementation modules (settings, project inspection, WinPython, ZIP, logging, GUI).
+- `build_offline.py` / `build-offline.bat`: Entry points. The `.bat` launches the script with `uv run`.
+- `odekake/*.py`: Implementation modules (settings, project inspection, WinPython, ZIP, logging, GUI).
+- `pyproject.toml` / `uv.lock`: The tool's own Python requirement and dev dependencies (pytest). No runtime dependencies.
 - `config/settings.json`: Shared default settings. Per-user overrides go in `config/settings.local.json` (gitignored).
-- `tests/*.Tests.ps1`: Pester 5 unit tests.
+- `tests/test_*.py`: pytest unit tests.
 - `docs/spec.md`: Specification. `docs/issues.md`: Open issues and pending ideas.
 - `VERSION`: Release version. Pushing a change to it on `main` triggers the release workflow.
 
 ## Coding
 
-- The script must work on both Windows PowerShell 5.1 and PowerShell 7.
-- Run `Invoke-Pester tests` after changing `lib/*.ps1`, and add or update tests for the changed behavior. The tests must not require network access.
-- Write user-facing text (log output, console messages, exception messages, GUI text), code comments, script help, and Pester `Context` / `It` names in English.
+- Use only the standard library at runtime, and keep the code working on Python 3.11 and later.
+- Run `uv run pytest` after changing `build_offline.py` or `odekake/*.py`, and add or update tests for the changed behavior. The tests must not require network access.
+- Write user-facing text (log output, console messages, exception messages, GUI text), code comments, docstrings, argument help, and test names in English.
 - `README.md`, `docs/spec.md`, and `docs/issues.md` are written in Japanese. Keep them in Japanese.
 
 ## Working with the spec

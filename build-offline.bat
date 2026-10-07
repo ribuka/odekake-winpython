@@ -1,5 +1,5 @@
 @echo off
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-offline.ps1" %*
+uv run --project "%~dp0." --no-dev python "%~dp0build_offline.py" %*
 set "RC=%ERRORLEVEL%"
 pause
 exit /b %RC%
