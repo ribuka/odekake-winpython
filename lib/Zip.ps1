@@ -45,7 +45,7 @@ function New-ZipFromDirectory([string]$Path, [string]$SourceDir) {
     New-ZipFile $Path @($entries)
 }
 
-# 7z files are created with the tar.exe that comes with Windows (bsdtar / libarchive) (spec §16).
+# 7z files are created with the tar.exe that comes with Windows (bsdtar / libarchive) (see docs/spec.md).
 # The tar on PATH may be GNU tar from Git for Windows, which cannot write 7z, so the one in System32 is used.
 function Get-SystemTarPath {
     return Join-Path $env:SystemRoot 'System32\tar.exe'

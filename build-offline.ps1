@@ -3,7 +3,7 @@
     Packs a uv project into a ZIP bundled with WinPython, for use on offline machines.
 
 .DESCRIPTION
-    See docs/spec.md for the specification.
+    See docs/spec.md for design notes.
     Settings priority: arguments > config\settings.local.json > config\settings.json > defaults
 
 .EXAMPLE
@@ -35,7 +35,7 @@ $ProgressPreference = 'SilentlyContinue'   # Invoke-WebRequest in 5.1 is extreme
 # Constants
 # ---------------------------------------------------------------------------
 
-# WinPython dot editions. Each row pins one release (spec §5). Keep the full URL instead of building it from a pattern.
+# WinPython dot editions. Each row pins one release (see docs/spec.md). Keep the full URL instead of building it from a pattern.
 $WinPythonTable = @{
     '3.12' = @{   # released 2025-03 (the last stable release that has 3.12)
         Url    = 'https://github.com/winpython/winpython/releases/download/16.6.20250620final/Winpython64-3.12.10.1dot.zip'
@@ -51,7 +51,7 @@ $WinPythonTable = @{
     }
 }
 
-# Top-level WinPython items removed by pruneWinPython (spec §8)
+# Top-level WinPython items removed by pruneWinPython (see docs/spec.md)
 $PruneTargets = @(
     'Jupyter Lab.exe', 'Jupyter Notebook.exe', 'Spyder.exe', 'Spyder reset.exe', 'VS Code.exe',
     'notebooks', 'wheelhouse'
@@ -102,7 +102,7 @@ $StartTime = Get-Date
 $Timestamp = $StartTime.ToString("yyyyMMdd'T'HHmmss")
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-# Functions live in lib\*.ps1 (spec §14)
+# Functions live in lib\*.ps1
 foreach ($f in 'Log', 'Settings', 'Project', 'WinPython', 'Zip', 'Gui') { . (Join-Path $PSScriptRoot "lib\$f.ps1") }
 
 # ---------------------------------------------------------------------------
@@ -181,7 +181,7 @@ function Invoke-Build {
     $stageDir = Join-Path $WorkDir 'stage'
     New-Item -ItemType Directory -Path $stageDir | Out-Null
 
-    # If this PC cannot create 7z, stop before downloading WinPython (no fallback to zip; spec §16)
+    # If this PC cannot create 7z, stop before downloading WinPython (no fallback to zip; see docs/spec.md)
     $tar = Get-SystemTarPath
     if ($cfg.winPythonArchiveFormat -eq '7z') {
         Assert-SevenZipWritable $tar $WorkDir

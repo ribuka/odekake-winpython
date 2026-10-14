@@ -15,7 +15,7 @@ function New-TopMostOwner {
     return $owner
 }
 
-# Turns the initialDir setting into the path where the folder selection dialog starts (spec §8).
+# Turns the initialDir setting into the path where the folder selection dialog starts (see docs/spec.md).
 # Returns $null if not set (empty). Environment variables (such as %USERPROFILE%) are expanded.
 # A relative path is an error (when started from the .bat, its base is unclear). If the folder does not exist, warns and returns $null.
 function Resolve-InitialDir([string]$Value) {
