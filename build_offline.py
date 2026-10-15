@@ -20,6 +20,7 @@ from odekake import (
     log,
     project,
     remove_tree,
+    scan,
     settings,
     source,
     winpython,
@@ -73,6 +74,7 @@ SETTING_TYPES: dict[str, settings.SettingType] = {
     "importName": "string",
     "installer": ("uv", "pip"),
     "winPythonArchiveFormat": ("zip", "7z"),
+    "virusScan": "bool",
     "noPopup": "bool",
     "initialDir": "string",
 }
@@ -91,6 +93,7 @@ OPTION_NAMES = {
     "importName": "--import-name",
     "installer": "--installer",
     "winPythonArchiveFormat": "--winpython-archive-format",
+    "virusScan": "--virus-scan",
     "noPopup": "--no-popup",
 }
 
@@ -151,6 +154,7 @@ def parse_arguments(argv: list[str]) -> tuple[argparse.Namespace, dict[str, obje
         "importName": "package to import in the check (default: name in pyproject.toml)",
         "installer": "how to install the dependencies",
         "winPythonArchiveFormat": "archive format of WinPython in the ZIP",
+        "virusScan": "scan the completed ZIP with Microsoft Defender and save evidence",
         "noPopup": "do not show the popup at the end",
     }
     for key, kind in SETTING_TYPES.items():
@@ -229,6 +233,7 @@ class Build:
             SETTING_DEFAULTS,
         )
         self.no_popup = cfg["noPopup"]
+        scanner = scan.check_defender() if cfg["virusScan"] else None
 
         if self.args.project_root is not None:
             root = settings.resolve_full_path(self.args.project_root)
@@ -505,6 +510,12 @@ class Build:
         remove_tree(WORK_DIR)
         log.write_log(f"Removed the work folder: {WORK_DIR}")
 
+        scan_record = None
+        if scanner is not None:
+            log.write_step("Scanning with Microsoft Defender")
+            scan_record = scan.scan_zip(zip_path, scanner)
+            log.write_log(f"Scan record: {scan_record}")
+
         elapsed = int(
             (datetime.datetime.now().astimezone() - self.start_time).total_seconds()
         )
@@ -517,6 +528,8 @@ class Build:
         log.write_log(f"Log: {log.log_path()}")
 
         self.result_text = f"Output:\n{zip_path}\n\nSHA-256:\n{sha256}\n\n{provenance}"
+        if scan_record:
+            self.result_text += f"\n\nScan record:\n{scan_record}"
 
 
 def main(argv: list[str]) -> int:
