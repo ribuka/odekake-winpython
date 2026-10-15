@@ -5,7 +5,7 @@ import os
 import pytest
 from conftest import write_text
 
-from build_offline import OPTION_NAMES, SETTING_TYPES, parse_arguments
+from build_offline import OPTION_NAMES, SETTING_DEFAULTS, SETTING_TYPES, parse_arguments
 from odekake import BuildError
 from odekake.settings import get_effective_settings, read_settings_file
 
@@ -23,7 +23,12 @@ def new_config_dir(folder, settings_json=None, local_json=None) -> str:
 
 def effective(arguments, repo_root, config_path=None):
     return get_effective_settings(
-        arguments, config_path, SETTING_TYPES, OPTION_NAMES, str(repo_root)
+        arguments,
+        config_path,
+        SETTING_TYPES,
+        OPTION_NAMES,
+        str(repo_root),
+        SETTING_DEFAULTS,
     )
 
 

@@ -4,11 +4,19 @@ import os
 from pathlib import Path, PureWindowsPath
 
 from odekake import BuildError, log
-from odekake.project import _read_toml
+from odekake.project import read_toml
 
 
 def clone_remote_source(root: str, destination: str, remote_ref: str) -> str:
     """Fetches a remote branch and checks out its exact commit in a local clone."""
+    prefix = log.run(
+        "git", ["-C", root, "rev-parse", "--show-prefix"], capture=True
+    ).strip()
+    if prefix:
+        raise BuildError(
+            "Remote source requires a project at the repository top level; "
+            "projects in repository subfolders are not supported."
+        )
     remotes = log.run("git", ["-C", root, "remote"], capture=True).splitlines()
     matches = [name for name in remotes if remote_ref.startswith(name + "/")]
     if not matches:
@@ -43,6 +51,13 @@ def clone_remote_source(root: str, destination: str, remote_ref: str) -> str:
     return sha
 
 
+def worktree_summary(sha: str, clean: bool) -> str:
+    """Formats worktree provenance consistently for logs and the popup."""
+    return (
+        f"Source: worktree / Commit: {sha} / Worktree: {'clean' if clean else 'dirty'}"
+    )
+
+
 def worktree_provenance(root: str) -> tuple[str, bool]:
     """Returns HEAD (or an unborn marker) and whether the worktree is clean."""
     try:
@@ -58,9 +73,7 @@ def worktree_provenance(root: str) -> tuple[str, bool]:
     clean = not log.run(
         "git", ["-C", root, "status", "--porcelain"], capture=True
     ).strip()
-    log.write_log(
-        f"Source: worktree / Commit: {sha} / Worktree: {'clean' if clean else 'dirty'}"
-    )
+    log.write_log(worktree_summary(sha, clean))
     if not clean:
         log.write_log(
             "Warning: the worktree is dirty; uncommitted changes may be included.",
@@ -72,7 +85,7 @@ def worktree_provenance(root: str) -> tuple[str, bool]:
 def assert_internal_path_dependencies(root: str) -> None:
     """Rejects lockfile path sources that escape the cloned repository."""
     base = Path(root).resolve()
-    for package in _read_toml(os.path.join(root, "uv.lock"), "uv.lock").get(
+    for package in read_toml(os.path.join(root, "uv.lock"), "uv.lock").get(
         "package", []
     ):
         source = package.get("source", {})
@@ -87,5 +100,10 @@ def assert_internal_path_dependencies(root: str) -> None:
             if windows.drive or windows.root or not target.is_relative_to(base):
                 raise BuildError(
                     f"Remote source cannot use a path dependency outside the repository: "
+                    f"{package.get('name', '(unknown)')} ({key}: {value})"
+                )
+            if not target.exists():
+                raise BuildError(
+                    f"Remote source path dependency is missing from the clone: "
                     f"{package.get('name', '(unknown)')} ({key}: {value})"
                 )

@@ -100,6 +100,18 @@ def test_fetch_failure_does_not_use_cached_ref(repository, tmp_path):
     assert not (tmp_path / "clone").exists()
 
 
+def test_remote_subfolder_is_rejected_before_fetch(repository, tmp_path):
+    root, _ = repository
+    subfolder = root / "app"
+    subfolder.mkdir()
+    git(root, "remote", "set-url", "origin", str(tmp_path / "missing.git"))
+    refs_before = git(root, "for-each-ref", "refs/remotes")
+    with pytest.raises(BuildError, match="repository top level"):
+        clone_remote_source(str(subfolder), str(tmp_path / "clone"), "origin/main")
+    assert git(root, "for-each-ref", "refs/remotes") == refs_before
+    assert not (tmp_path / "clone").exists()
+
+
 def test_deleted_remote_branch_does_not_use_cached_ref(repository, tmp_path):
     root, _bare = repository
     git(root, "branch", "removed")
@@ -141,6 +153,7 @@ def test_rejects_external_lock_paths(tmp_path, kind, value):
 
 
 def test_accepts_internal_workspace_and_registry_sources(tmp_path):
+    (tmp_path / "packages/member").mkdir(parents=True)
     (tmp_path / "uv.lock").write_text(
         '[[package]]\nsource = { editable = "." }\n'
         '[[package]]\nsource = { directory = "packages/member" }\n'
@@ -148,6 +161,15 @@ def test_accepts_internal_workspace_and_registry_sources(tmp_path):
         encoding="utf-8",
     )
     assert_internal_path_dependencies(str(tmp_path))
+
+
+def test_rejects_internal_dependency_missing_from_clone(tmp_path):
+    (tmp_path / "uv.lock").write_text(
+        '[[package]]\nname = "dep"\nsource = { path = "wheels/dep.whl" }\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(BuildError, match="missing from the clone"):
+        assert_internal_path_dependencies(str(tmp_path))
 
 
 def test_worktree_clean_dirty_and_ignored_files(repository, logs):
@@ -242,3 +264,35 @@ def test_build_uses_clone_for_metadata_dependencies_and_zip(
     assert "origin/main" in build.result_text
     assert expected in build.result_text
     assert not work.exists()
+
+
+@pytest.mark.parametrize("subfolder", [False, True])
+def test_worktree_validation_failure_preserves_previous_work(
+    repository, tmp_path, monkeypatch, subfolder
+):
+    root, _ = repository
+    if subfolder:
+        app = root / "app"
+        app.mkdir()
+        for name in ("pyproject.toml", "uv.lock", ".python-version"):
+            (app / name).write_bytes((root / name).read_bytes())
+        root = app
+    work = tmp_path / "work"
+    work.mkdir()
+    marker = work / "previous-failure"
+    marker.write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(build_offline, "WORK_DIR", str(work))
+    monkeypatch.setattr(log, "open_log_file", lambda *args: None)
+    args, given = build_offline.parse_arguments(
+        [
+            "--project-root",
+            str(root),
+            "--source",
+            "worktree",
+            "--output-dir",
+            str(tmp_path / "missing"),
+        ]
+    )
+    with pytest.raises(BuildError, match="Output folder not found"):
+        build_offline.Build(args, given).run()
+    assert marker.read_text() == "keep"

@@ -125,9 +125,11 @@ build-offline.bat --project-root D:\work\myproject --source remote --remote-ref 
 
 - 一度だけ作業ツリーから作るには `--source worktree` を指定します。
 - `origin/master` や `upstream/main` も指定できます。タグ、手元のブランチ、`origin/HEAD` は指定できません。
+- `remote` はリポジトリ最上位のプロジェクトだけに対応します。サブフォルダを選ぶと fetch 前にエラーにします。作業ツリーモードでは従来どおりサブフォルダも選べます。
 - fetch が失敗した場合は停止します。保存済みの古い ref では続けません。
 - `trackedOnly` は併用できますが、clone 先には未 add のファイルがないため結果は変わりません。`exclude` と `includeExportIgnored` は通常どおり使えます。
 - clone 外を指す `uv.lock` の path 依存はエラーにします。リポジトリ内の相対パスのワークスペースメンバーは使えます。
+  clone に存在しない path 依存(gitignore された wheel など)も事前にエラーにします。
 - サブモジュールの中身は含みません。Git LFS はポインタファイルが入る可能性があります。
 - 作業用 clone は成功時に削除し、失敗時には調査用に残します。
 

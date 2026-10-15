@@ -76,6 +76,7 @@ SETTING_TYPES: dict[str, settings.SettingType] = {
     "noPopup": "bool",
     "initialDir": "string",
 }
+SETTING_DEFAULTS = {"remoteRef": "origin/main"}
 OPTION_NAMES = {
     "source": "--source",
     "remoteRef": "--remote-ref",
@@ -194,6 +195,14 @@ def parse_arguments(argv: list[str]) -> tuple[argparse.Namespace, dict[str, obje
 # ---------------------------------------------------------------------------
 
 
+def prepare_work_folder() -> None:
+    """Replaces the previous work folder when the build needs it."""
+    if os.path.exists(WORK_DIR):
+        log.write_log(f"Removing the previous work folder: {WORK_DIR}")
+        remove_tree(WORK_DIR)
+    os.makedirs(WORK_DIR)
+
+
 class Build:
     def __init__(self, args: argparse.Namespace, given: dict[str, object]):
         self.args = args
@@ -212,7 +221,12 @@ class Build:
 
         # --- Settings and target project ---
         cfg = settings.get_effective_settings(
-            self.given, self.args.config_path, SETTING_TYPES, OPTION_NAMES, REPO_ROOT
+            self.given,
+            self.args.config_path,
+            SETTING_TYPES,
+            OPTION_NAMES,
+            REPO_ROOT,
+            SETTING_DEFAULTS,
         )
         self.no_popup = cfg["noPopup"]
 
@@ -251,11 +265,8 @@ class Build:
             )
 
         # --- Work folder and source ---
-        if os.path.exists(WORK_DIR):
-            log.write_log(f"Removing the previous work folder: {WORK_DIR}")
-            remove_tree(WORK_DIR)
-        os.makedirs(WORK_DIR)
         if cfg["source"] == "remote":
+            prepare_work_folder()
             clone_dir = os.path.join(WORK_DIR, "source")
             sha = source.clone_remote_source(root, clone_dir, cfg["remoteRef"])
             root = clone_dir
@@ -263,7 +274,7 @@ class Build:
             log.write_log(provenance)
         else:
             sha, clean = source.worktree_provenance(root)
-            provenance = f"Source: worktree / Commit: {sha} / Worktree: {'clean' if clean else 'dirty'}"
+            provenance = source.worktree_summary(sha, clean)
         for required in ("pyproject.toml", "uv.lock"):
             if not os.path.isfile(os.path.join(root, required)):
                 raise BuildError(f"{required} not found in the target project: {root}")
@@ -311,6 +322,8 @@ class Build:
         )
 
         # --- Work folder ---
+        if cfg["source"] == "worktree":
+            prepare_work_folder()
         stage_dir = os.path.join(WORK_DIR, "stage")
         os.makedirs(stage_dir)
 

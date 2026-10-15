@@ -86,16 +86,17 @@ def get_effective_settings(
     setting_types: Mapping[str, SettingType],
     option_names: Mapping[str, str],
     repo_root: str,
+    defaults: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Overrides key by key in the order defaults < settings.json < settings.local.json < arguments.
 
     arguments holds only the arguments given on the command line, keyed by setting key.
     option_names maps a setting key to its argument name (used in error messages).
     Without config_path, reads <repo_root>\\config\\settings.json.
+    defaults supplies explicit defaults for settings with nonstandard defaults.
     """
     settings = {key: _default(kind) for key, kind in setting_types.items()}
-    if "remoteRef" in settings:
-        settings["remoteRef"] = "origin/main"
+    settings.update(defaults or {})
 
     if config_path is not None:
         config_file = resolve_full_path(config_path)

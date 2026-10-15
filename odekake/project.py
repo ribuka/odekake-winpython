@@ -7,7 +7,8 @@ import tomllib
 from odekake import BuildError, log
 
 
-def _read_toml(path: str, label: str) -> dict:
+def read_toml(path: str, label: str) -> dict:
+    """Reads project metadata with a user-facing TOML parse error."""
     try:
         with open(path, "rb") as f:
             return tomllib.load(f)
@@ -20,7 +21,7 @@ def read_pyproject(path: str) -> dict:
 
     Returns {'name': str | None, 'version': str | None, 'dynamic': list[str]}.
     """
-    project = _read_toml(path, "pyproject.toml").get("project", {})
+    project = read_toml(path, "pyproject.toml").get("project", {})
     if not isinstance(project, dict):
         project = {}
     name = project.get("name")
@@ -202,7 +203,7 @@ def get_non_pypi_requirements(
     requirements.txt does not tell which one was chosen, so it is returned if any of them is not PyPI (to be safe).
     """
     registries: dict[str, list[str]] = {}
-    for package in _read_toml(lock_path, "uv.lock").get("package", []):
+    for package in read_toml(lock_path, "uv.lock").get("package", []):
         source = package.get("source", {})
         registry = source.get("registry") if isinstance(source, dict) else None
         if package.get("name") and registry:

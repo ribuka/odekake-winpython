@@ -81,6 +81,7 @@
 - clone 外の path 依存は、相対パスの意味が変わるため事前に拒否する。絶対パスも元の作業ツリーを参照しうるため拒否する。clone 内の相対パスはワークスペースのため許容する。作業ツリーモードの依存処理は変えない。
 - dirty な作業ツリーは警告して続ける。停止を強制する変更は #32 に分離する。コミットなしのリポジトリでも従来どおりビルドできるよう、出所の記録は `(no commits)` にする。
 - サブモジュールは初期化しない。既存のファイル収集もサブモジュールの中身を含めないため。Git LFS の実体取得は保証せず、ポインタが成果物に入る可能性がある。
+- remote はリポジトリ最上位にあるプロジェクトだけに対応する。サブフォルダ対応は clone 元の最上位とプロジェクトの基準位置を分離し、path 依存の基準も変更する必要があるため、今回の範囲から外す。fetch 前に明確なエラーにし、作業ツリーモードのサブフォルダ利用は維持する。
 
 ## WinPython と Python バージョン
 
@@ -212,7 +213,6 @@
 ### git(git 2.54.0、2026-10-06 確認)
 
 - 2026-10-16、Windows 上のローカル bare リポジトリを使うテストで確認: `--no-checkout --no-hardlinks` のローカル clone は、手元の main から到達できず、fetch した remote-tracking ref だけが指すコミットもチェックアウトできる。
-
 - pathspec の `:(exclude,glob)` では、`tests` はフォルダごと、`*.log` は最上位だけ、`**/*.log` は全階層に当たる。
 - `git ls-files` は export-ignore を見ない。pathspec の `:(exclude,attr:export-ignore)` はファイル自身の属性だけを見るので、フォルダに付いた export-ignore は効かない。
 - `git check-attr export-ignore` も同じ。`/tests/ export-ignore` のとき、`tests/x.py` は unspecified。フォルダを `tests/`(末尾に `/`)で問い合わせると set になり、`tests` では unspecified。`docs export-ignore`(末尾に `/` なし)は、`docs` でも `docs/` でも set。
