@@ -51,7 +51,7 @@ def new_zip_from_directory(path: str, source_dir: str) -> None:
 
 
 def get_system_tar_path() -> str:
-    """7z files are created with the tar.exe that comes with Windows (bsdtar / libarchive) (spec §16).
+    """7z files are created with the tar.exe that comes with Windows (bsdtar / libarchive) (see docs/spec.md).
 
     The tar on PATH may be GNU tar from Git for Windows, which cannot write 7z, so the one in System32 is used.
     """

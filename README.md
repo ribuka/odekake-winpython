@@ -3,7 +3,7 @@
 uv プロジェクトを、インターネットにつながらない Windows PC へ持ち出すための ZIP にするスクリプトです。
 Python の実行環境には WinPython(dot 版)を使い、依存ライブラリを入れた状態で同梱します。
 
-詳しい仕様は [docs/spec.md](docs/spec.md) を参照してください。
+設計の判断の理由や、調べて分かった事実は [docs/spec.md](docs/spec.md) にまとめています。
 
 ## 必要なもの(ZIP を作る PC)
 
@@ -52,6 +52,7 @@ build-offline.bat --project-root D:\work\myproject
 | `--winpython-archive-format zip` / `--winpython-archive-format 7z` | WinPython を入れるアーカイブの形式(既定は `zip`。下の「WinPython のアーカイブ形式」を参照) |
 | `--prune-winpython` / `--no-prune-winpython` | WinPython の不要なファイルを削除する / しない(下の「WinPython の不要なファイルの削除」を参照) |
 | `--no-popup` | 終了時のポップアップを出さない |
+| `--config-path <ファイル>` | 設定ファイル(既定は `config\settings.json`。同じフォルダの `settings.local.json` も読みます) |
 
 - `--groups` などの複数の値は、`--groups a b`、`--groups a --groups b`、`--groups a,b` のどれでも指定できます。
 - 真偽値のオプションは、`--tracked-only` / `--no-tracked-only` のように、`--no-` を付けると設定ファイルの値を打ち消せます。

@@ -3,7 +3,7 @@
 A general-purpose Python script (Windows only) that packages any uv project into a ZIP, based on WinPython, for carrying it into an offline Windows environment.
 
 - Always respond in Japanese.
-- `docs/spec.md` is the source of truth for behavior. Read the relevant sections before changing code.
+- `docs/spec.md` holds design decisions (with their reasons) and verified facts. Read the relevant sections before changing code.
 
 ## Repository layout
 
@@ -13,7 +13,7 @@ A general-purpose Python script (Windows only) that packages any uv project into
 - `config/settings.json`: Shared default settings. Per-user overrides go in `config/settings.local.json` (gitignored).
 - `tests/test_*.py`: pytest unit tests.
 - `.github/workflows/ci.yml`: CI (ruff check and pytest on Ubuntu) for pull requests.
-- `docs/spec.md`: Specification. `docs/issues.md`: Open issues and pending ideas.
+- `docs/spec.md`: Design notes. Open issues and pending ideas are GitHub issues.
 - `VERSION`: Release version. Pushing a change to it on `main` triggers the release workflow.
 
 ## Coding
@@ -23,16 +23,19 @@ A general-purpose Python script (Windows only) that packages any uv project into
 - Run `uv run pytest` after changing `build_offline.py` or `odekake/*.py`, and add or update tests for the changed behavior. The tests must not require network access.
 - CI runs the tests on Ubuntu. Mark tests that need Windows (tar.exe, Windows paths, tkinter dialogs, running python.exe) with `pytest.mark.skipif(sys.platform != "win32", ...)`; write the rest to pass on Ubuntu too.
 - Write user-facing text (log output, console messages, exception messages, GUI text), code comments, docstrings, argument help, and test names in English.
-- `README.md`, `docs/spec.md`, and `docs/issues.md` are written in Japanese. Keep them in Japanese.
+- `README.md` and `docs/spec.md` are written in Japanese. Keep them in Japanese.
 
 ## Working with the spec
 
+- `docs/spec.md` records only what the code and tests cannot tell: why a design was chosen (including rejected alternatives) and facts verified by investigation. Do not restate behavior that the code, tests, or README already describe.
+  - User-facing usage, options, and settings belong in `README.md`.
+  - Work plans, build/verification logs, and discussion history belong in issues and pull requests.
 - Status markers in `docs/spec.md`:
-  - **(確定)**: Approved by the user.
   - **(推測)** / **(未検証)**: Not backed by evidence.
   - **(未決定)**: Awaiting the user's decision. NEVER settle these on your own.
+  - Statements without a marker are decided or verified.
 - For items marked "実装時に提案すること" (to be proposed during implementation), present a proposal and get approval before implementing it.
-- Record spec-related decisions and newly confirmed facts in `docs/spec.md` as they occur. Mark facts verified on a real machine with the date.
+- When a change involves a new design decision or a newly verified fact, add it to `docs/spec.md`. Mark facts verified on a real machine with the date.
 
 ## Collaboration
 

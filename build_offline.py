@@ -1,6 +1,6 @@
 """Packs a uv project into a ZIP bundled with WinPython, for use on offline machines.
 
-See docs/spec.md for the specification.
+See docs/spec.md for design notes.
 Settings priority: arguments > config\\settings.local.json > config\\settings.json > defaults
 
 Example:
@@ -21,7 +21,7 @@ from odekake import zip as ziputil
 # Constants
 # ---------------------------------------------------------------------------
 
-# WinPython dot editions. Each row pins one release (spec §5). Keep the full URL instead of building it from a pattern.
+# WinPython dot editions. Each row pins one release (see docs/spec.md). Keep the full URL instead of building it from a pattern.
 WINPYTHON_TABLE = {
     "3.12": {  # released 2025-03 (the last stable release that has 3.12)
         "url": "https://github.com/winpython/winpython/releases/download/16.6.20250620final/Winpython64-3.12.10.1dot.zip",
@@ -37,7 +37,7 @@ WINPYTHON_TABLE = {
     },
 }
 
-# Top-level WinPython items removed by pruneWinPython (spec §8)
+# Top-level WinPython items removed by pruneWinPython (see docs/spec.md)
 PRUNE_TARGETS = [
     "Jupyter Lab.exe",
     "Jupyter Notebook.exe",
@@ -286,7 +286,7 @@ class Build:
         stage_dir = os.path.join(WORK_DIR, "stage")
         os.makedirs(stage_dir)
 
-        # If this PC cannot create 7z, stop before downloading WinPython (no fallback to zip; spec §16)
+        # If this PC cannot create 7z, stop before downloading WinPython (no fallback to zip; see docs/spec.md)
         tar = ziputil.get_system_tar_path()
         if cfg["winPythonArchiveFormat"] == "7z":
             ziputil.assert_seven_zip_writable(tar, WORK_DIR)

@@ -178,7 +178,7 @@ def get_export_ignored_paths(root: str, paths: list[str]) -> set[str]:
     )
     # The output repeats "path NUL attribute NUL value NUL". Only entries whose value is set are left out (same as git archive).
     # The string value export-ignore=set is also printed as set and cannot be told apart, so it is left out too
-    # (known limitation; spec §2).
+    # (known limitation; see docs/spec.md).
     fields = out.split("\0")
     marked = {fields[j] for j in range(0, len(fields) - 2, 3) if fields[j + 2] == "set"}
 
