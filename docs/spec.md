@@ -23,6 +23,7 @@
 - 任意の uv プロジェクトを、オフラインの Windows 環境へ持ち出すための ZIP にする。特定のリポジトリ専用ではない。
 - **対象プロジェクト**(ZIP にする uv プロジェクト)は、このリポジトリの外にある。
 - 対象プロジェクトには何も書かない。設定もログもキャッシュも、このリポジトリに置く。
+  - `source: remote` の fetch による対象リポジトリの `.git`(remote-tracking ref と取得オブジェクト)の更新は例外として許容する。作業ツリーと手元のブランチは変更しない(issue #26)。
 - ビルドする PC も Windows に限る。成果物は Windows 専用の WinPython を含み、ビルドの途中で同梱の `python.exe` を実行して確かめるため。
 
 ## 成果物の構成
@@ -53,7 +54,7 @@
 
 - 既定は、gitignore されていない全ファイル(未 add のファイルを含む)。`trackedOnly` で add 済みのファイルだけにできる。
 - `.gitattributes` で `export-ignore` が付いたファイルは、既定で除く(`git archive` に合わせた。issue #12)。
-  - `.gitattributes` は作業ツリーのものを読む(`git archive` の既定はコミット済みのもの)。未 add のファイルも ZIP に入れるので、それに合わせた。
+  - `.gitattributes` は作業ツリーのものを読む(`git archive` の既定はコミット済みのもの)。未 add のファイルも ZIP に入れるので、それに合わせた。`source: remote` では、選んだコミットをチェックアウトした clone 先のものを読む。
   - 判定の方法は「確かめた事実」の git の項を参照。
 - `exclude` は git の pathspec(glob)の書式にした。`:(exclude,glob)<パターン>` として git に渡す。
   - .gitignore とは違い、`*.log` は最上位のファイルにしか当たらない。どの階層にも当てるなら `**/*.log`。
@@ -69,6 +70,18 @@
   - 動作確認で import する名前には、`name` の `-` を `_` に置き換えたものを使う。`importName` で上書きできる。
 - ZIP 名には常にタイムスタンプを付ける。出力を上書きすることがない。
 - 出力先の既定は、Windows の既知フォルダ(Downloads)として `SHGetKnownFolderPath` で取得する。`%USERPROFILE%\Downloads` と決め打ちにしないのは、フォルダを移している環境があるため。
+
+## ソース選択(issue #26)
+
+- `source` は `worktree` / `remote` の選択式にした。ref 文字列だけではソース選択の意図が伝わらず、設定ファイルの remote を引数で worktree に戻す方法も必要なため。共通設定には remote を書かず、従来の挙動を既定に保つ。
+- リモートから作る場合は、手元のリポジトリを fetch してローカル clone する。既存の git 認証を使い、clone 先でも `git ls-files` / `git check-attr` による収集を再利用するため。URL からの直接 clone は認証・GUI・キャッシュの検討が増えるので採らない。
+- `git archive` は採らない。展開先が git リポジトリにならず、既存の収集処理を使えないうえ、export-ignore を必ず適用して `includeExportIgnored` を実現しにくいため。
+- 対象はリモートのブランチだけに限る。タグやローカルブランチは「リモートと同じ内容を使う」という目的から外れる。リモート名に `/` がありうるため一覧と最長一致で照合し、そのリモートの対象ブランチを明示的な refspec で fetch する。限定された fetch 設定でも対象を取得し、削除済みブランチや通信失敗時に古い ref を使わないため。
+- clone は `--no-checkout --no-hardlinks` とし、fetch 後に `refs/remotes/<remoteRef>^{commit}` で解決した SHA を detached HEAD でチェックアウトする。オブジェクトを独立したコピーにし、元のブランチを変更しないため。`--shared` と `--depth` は使わない。
+- clone 外の path 依存は、相対パスの意味が変わるため事前に拒否する。絶対パスも元の作業ツリーを参照しうるため拒否する。clone 内の相対パスはワークスペースのため許容する。作業ツリーモードの依存処理は変えない。
+- dirty な作業ツリーは警告して続ける。停止を強制する変更は #32 に分離する。コミットなしのリポジトリでも従来どおりビルドできるよう、出所の記録は `(no commits)` にする。
+- サブモジュールは初期化しない。既存のファイル収集もサブモジュールの中身を含めないため。Git LFS の実体取得は保証せず、ポインタが成果物に入る可能性がある。
+- remote はリポジトリ最上位にあるプロジェクトだけに対応する。サブフォルダ対応は clone 元の最上位とプロジェクトの基準位置を分離し、path 依存の基準も変更する必要があるため、今回の範囲から外す。fetch 前に明確なエラーにし、作業ツリーモードのサブフォルダ利用は維持する。
 
 ## WinPython と Python バージョン
 
@@ -199,6 +212,7 @@
 
 ### git(git 2.54.0、2026-10-06 確認)
 
+- 2026-10-16、Windows 上のローカル bare リポジトリを使うテストで確認: `--no-checkout --no-hardlinks` のローカル clone は、手元の main から到達できず、fetch した remote-tracking ref だけが指すコミットもチェックアウトできる。
 - pathspec の `:(exclude,glob)` では、`tests` はフォルダごと、`*.log` は最上位だけ、`**/*.log` は全階層に当たる。
 - `git ls-files` は export-ignore を見ない。pathspec の `:(exclude,attr:export-ignore)` はファイル自身の属性だけを見るので、フォルダに付いた export-ignore は効かない。
 - `git check-attr export-ignore` も同じ。`/tests/ export-ignore` のとき、`tests/x.py` は unspecified。フォルダを `tests/`(末尾に `/`)で問い合わせると set になり、`tests` では unspecified。`docs export-ignore`(末尾に `/` なし)は、`docs` でも `docs/` でも set。

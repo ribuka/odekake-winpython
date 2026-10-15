@@ -5,7 +5,7 @@ import os
 import pytest
 from conftest import write_text
 
-from build_offline import OPTION_NAMES, SETTING_TYPES, parse_arguments
+from build_offline import OPTION_NAMES, SETTING_DEFAULTS, SETTING_TYPES, parse_arguments
 from odekake import BuildError
 from odekake.settings import get_effective_settings, read_settings_file
 
@@ -23,7 +23,12 @@ def new_config_dir(folder, settings_json=None, local_json=None) -> str:
 
 def effective(arguments, repo_root, config_path=None):
     return get_effective_settings(
-        arguments, config_path, SETTING_TYPES, OPTION_NAMES, str(repo_root)
+        arguments,
+        config_path,
+        SETTING_TYPES,
+        OPTION_NAMES,
+        str(repo_root),
+        SETTING_DEFAULTS,
     )
 
 
@@ -38,6 +43,33 @@ class TestGetEffectiveSettings:
         assert cfg["groups"] == []
         assert cfg["installer"] == "uv"
         assert cfg["winPythonArchiveFormat"] == "zip"
+        assert cfg["source"] == "worktree"
+        assert cfg["remoteRef"] == "origin/main"
+
+    def test_source_arguments_override_remote_settings(self, tmp_path):
+        root = new_config_dir(
+            tmp_path, '{"source": "remote", "remoteRef": "upstream/main"}'
+        )
+        _args, given = parse_arguments(
+            ["--source", "worktree", "--remote-ref", "origin/master"]
+        )
+        cfg = effective(given, root)
+        assert cfg["source"] == "worktree"
+        assert cfg["remoteRef"] == "origin/master"
+        assert effective({}, root)["source"] == "remote"
+
+    @pytest.mark.parametrize("value", ["REMOTE", "local", ""])
+    def test_rejects_invalid_source_arguments(self, value, tmp_path):
+        with pytest.raises(BuildError, match="Setting 'source' must be one of"):
+            effective({"source": value}, tmp_path)
+
+    def test_rejects_invalid_source_and_remote_ref_settings(self, tmp_path):
+        root = new_config_dir(tmp_path, '{"source": "REMOTE"}')
+        with pytest.raises(BuildError, match="Setting 'source' must be one of"):
+            effective({}, root)
+        root = new_config_dir(tmp_path, '{"remoteRef": false}')
+        with pytest.raises(BuildError, match="Setting 'remoteRef' must be a string"):
+            effective({}, root)
 
     def test_reads_config_settings_json_without_config_path(self, tmp_path):
         root = new_config_dir(tmp_path, '{ "outputDir": "D:\\\\out" }')
