@@ -133,6 +133,7 @@ def test_event_json_shapes(payload, expected):
         (0, "found 1 threats", [], "disagree"),
         (0, "found 0 threats", [event(1117, FOLDER)], "disagree"),
         (2, "found 0 threats", [], "code 2"),
+        (2, "", [], "code 2"),
         (0, "found 0 threats", [event(1002, SCAN_ID)], "interrupted"),
         (0, "found 0 threats", [event(1005, SCAN_ID)], "failed"),
     ],
@@ -175,7 +176,8 @@ def test_waits_for_terminal_and_remediation(monkeypatch, complete, detected):
         None, FOLDER, monotonic=lambda: ticks[0], sleep=sleep
     )
     assert done is complete
-    assert ticks[0] == (4 if detected else 2) if complete else ticks[0] == 60
+    expected = (4 if detected else 2) if complete else 60
+    assert ticks[0] == expected
     assert bool(events)
 
 
@@ -386,3 +388,116 @@ def test_failed_event_query_preserves_collected_events(monkeypatch):
     with pytest.raises(BuildError, match="access denied"):
         scan.wait_events(None, FOLDER, sleep=lambda *a: None, collected=collected)
     assert collected == clean_events()[:1]
+
+
+@pytest.mark.parametrize("threat", [False, True])
+def test_cleanup_failure_preserves_scan_failure_and_folder(
+    monkeypatch, tmp_path, threat
+):
+    path = tmp_path / "payload.zip"
+    payload(path)
+    monkeypatch.setattr(scan, "long_path", lambda path: path)
+    real_remove = scan.remove_tree
+    folders = []
+
+    def remove(folder):
+        folders.append(folder)
+        raise OSError("file is in use")
+
+    monkeypatch.setattr(scan, "remove_tree", remove)
+
+    def wait(*a, **k):
+        return clean_events() + ([event(1116, FOLDER)] if threat else []), True
+
+    monkeypatch.setattr(scan, "wait_events", wait)
+    try:
+        with pytest.raises(BuildError) as error:
+            scan.scan_zip(
+                str(path),
+                "scanner",
+                lambda *a, **k: result(
+                    "found 1 threats" if threat else "found no threats"
+                ),
+            )
+        assert "Cannot remove temporary scan folder" in str(error.value)
+        assert folders[0] in str(error.value)
+        assert ("found threats" in str(error.value)) is threat
+        assert path.exists()
+    finally:
+        for folder in folders:
+            real_remove(folder)
+
+
+def test_extraction_detection_is_included_before_scan(monkeypatch, tmp_path):
+    path = tmp_path / "payload.zip"
+    payload(path)
+    base = datetime.datetime(2026, 10, 16, 12, tzinfo=datetime.UTC)
+    now = [base]
+
+    class Clock(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now[0]
+
+    monkeypatch.setattr(scan.datetime, "datetime", Clock)
+    monkeypatch.setattr(scan, "long_path", lambda path: path)
+    original_extract = scan.extract_payload
+
+    def extract(*args):
+        original_extract(*args)
+        now[0] += datetime.timedelta(seconds=10)
+
+    monkeypatch.setattr(scan, "extract_payload", extract)
+
+    def read(start, run):
+        assert start <= base
+        folder = folders[0]
+        return [
+            event(1000, f"{SCAN_ID} {folder}"),
+            event(1001, SCAN_ID, 10),
+            event(1116, folder, 1),
+            event(1117, folder, 2),
+        ]
+
+    monkeypatch.setattr(scan, "read_events", read)
+    folders = []
+
+    def run(args, **kwargs):
+        folders.append(args[-1])
+        return result("found no threats")
+
+    with pytest.raises(BuildError, match="disagree"):
+        scan.scan_zip(str(path), "scanner", run)
+    evidence = Path(str(path) + ".scan.txt").read_text(encoding="utf-8")
+    assert "Event ID: 1116" in evidence
+    assert "Event ID: 1117" in evidence
+    assert not os.path.exists(folders[0])
+
+
+def test_evidence_failure_preserves_original_failure_and_cleans_up(
+    monkeypatch, tmp_path
+):
+    path = tmp_path / "payload.zip"
+    payload(path)
+    folders = []
+
+    def long(path):
+        folders.append(path)
+        return path
+
+    monkeypatch.setattr(scan, "long_path", long)
+
+    def fail_extract(*args):
+        raise BuildError("original extraction error")
+
+    def fail_write(*args):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(scan, "extract_payload", fail_extract)
+    monkeypatch.setattr(scan, "write_evidence", fail_write)
+    with pytest.raises(BuildError) as error:
+        scan.scan_zip(str(path), "scanner")
+    assert "original extraction error" in str(error.value)
+    assert "Cannot write scan record" in str(error.value)
+    assert "disk full" in str(error.value)
+    assert not os.path.exists(folders[0])

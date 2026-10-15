@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import zipfile
@@ -141,10 +142,10 @@ def validate_result(returncode, stdout, events):
     """Rejects threats, incomplete scans, and conflicting evidence."""
     if any(e["Id"] == 1000 and not GUID.search(e["Message"]) for e in events):
         raise BuildError("Defender start event has no scan GUID.")
-    threats = threat_count(stdout) > 0
-    detected = any(e["Id"] in (1116, 1117) for e in events)
     if returncode:
         raise BuildError(f"Defender exited with code {returncode}.")
+    threats = threat_count(stdout) > 0
+    detected = any(e["Id"] in (1116, 1117) for e in events)
     if any(e["Id"] in (1002, 1005) for e in events):
         raise BuildError("Defender scan was interrupted or failed.")
     if threats != detected:
@@ -232,30 +233,48 @@ def scan_zip(zip_path, scanner, run=subprocess.run):
     events = []
     try:
         try:
-            folder = tempfile.mkdtemp(
-                prefix=f"odekake-scan-{os.path.splitext(os.path.basename(zip_path))[0]}-"
-            )
-            folder = long_path(folder)
-            extract_payload(zip_path, folder, run)
-            start = datetime.datetime.now().astimezone() - datetime.timedelta(seconds=5)
-            result = run(
-                [scanner, "-Scan", "-ScanType", "3", "-File", folder],
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            stdout = result.stdout
-            events, complete = wait_events(start, folder, run, collected=events)
-            write_evidence(evidence, stdout, events)
+            try:
+                # Include detections during extraction, before the explicit scan starts.
+                start = datetime.datetime.now().astimezone() - datetime.timedelta(
+                    seconds=5
+                )
+                folder = tempfile.mkdtemp(
+                    prefix=f"odekake-scan-{os.path.splitext(os.path.basename(zip_path))[0]}-"
+                )
+                folder = long_path(folder)
+                extract_payload(zip_path, folder, run)
+                result = run(
+                    [scanner, "-Scan", "-ScanType", "3", "-File", folder],
+                    capture_output=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                stdout = result.stdout
+                events, complete = wait_events(start, folder, run, collected=events)
+            finally:
+                prior = sys.exception()
+                try:
+                    write_evidence(evidence, stdout, events)
+                except Exception as error:
+                    message = f"Cannot write scan record: {evidence}\n{error}"
+                    if prior is not None:
+                        message = f"{prior}\n{message}"
+                    raise BuildError(message) from error
+            if result.returncode:
+                raise BuildError(f"Defender exited with code {result.returncode}.")
             if not complete:
                 raise BuildError("Timed out waiting for Defender scan events.")
             validate_result(result.returncode, stdout, events)
         finally:
+            prior = sys.exception()
             try:
-                write_evidence(evidence, stdout, events)
-            finally:
                 if folder is not None:
                     remove_tree(folder)
+            except Exception as error:
+                message = f"Cannot remove temporary scan folder: {folder}\n{error}"
+                if prior is not None:
+                    message = f"{prior}\n{message}"
+                raise BuildError(message) from error
     except Exception as error:
         retained = (
             "Outer ZIP retained"
