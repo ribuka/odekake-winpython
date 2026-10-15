@@ -14,7 +14,7 @@ def _expand_environment_variables(value: str) -> str:
 
 
 def resolve_initial_dir(value: str | None) -> str | None:
-    """Turns the initialDir setting into the path where the folder selection dialog starts (spec §8).
+    """Turns the initialDir setting into the path where the folder selection dialog starts (see docs/spec.md).
 
     Returns None if not set (empty). Environment variables (such as %USERPROFILE%) are expanded.
     A relative path is an error (when started from the .bat, its base is unclear).
