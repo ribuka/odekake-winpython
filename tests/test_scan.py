@@ -486,6 +486,7 @@ def test_evidence_failure_preserves_original_failure_and_cleans_up(
         return path
 
     monkeypatch.setattr(scan, "long_path", long)
+    monkeypatch.setattr(scan, "read_events", lambda *a: [])
 
     def fail_extract(*args):
         raise BuildError("original extraction error")
@@ -501,3 +502,40 @@ def test_evidence_failure_preserves_original_failure_and_cleans_up(
     assert "Cannot write scan record" in str(error.value)
     assert "disk full" in str(error.value)
     assert not os.path.exists(folders[0])
+
+
+def test_extraction_failure_collects_detection_evidence(monkeypatch, tmp_path):
+    path = tmp_path / "payload.zip"
+    payload(path)
+    folders = []
+
+    def long(path):
+        folders.append(path)
+        return path
+
+    monkeypatch.setattr(scan, "long_path", long)
+
+    def extract(*args):
+        raise PermissionError("extracted file was locked")
+
+    def read(*args):
+        return [
+            event(1116, folders[0]),
+            event(1117, folders[0], 1),
+            event(1116, "unrelated path"),
+        ]
+
+    monkeypatch.setattr(scan, "extract_payload", extract)
+    monkeypatch.setattr(scan, "read_events", read)
+    with pytest.raises(BuildError, match="extracted file was locked"):
+        scan.scan_zip(str(path), "scanner")
+    evidence = Path(str(path) + ".scan.txt").read_text(encoding="utf-8")
+    assert "Event ID: 1116" in evidence
+    assert "Event ID: 1117" in evidence
+    assert "unrelated path" not in evidence
+    assert not os.path.exists(folders[0])
+
+
+def test_nonzero_exit_precedes_incomplete_event_timeout():
+    with pytest.raises(BuildError, match="code 2"):
+        scan.validate_result(2, "", [], complete=False)

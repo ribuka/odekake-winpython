@@ -138,12 +138,14 @@ def threat_count(stdout):
     return max(0 if count == "no" else int(count) for count in counts)
 
 
-def validate_result(returncode, stdout, events):
+def validate_result(returncode, stdout, events, complete=True):
     """Rejects threats, incomplete scans, and conflicting evidence."""
     if any(e["Id"] == 1000 and not GUID.search(e["Message"]) for e in events):
         raise BuildError("Defender start event has no scan GUID.")
     if returncode:
         raise BuildError(f"Defender exited with code {returncode}.")
+    if not complete:
+        raise BuildError("Timed out waiting for Defender scan events.")
     threats = threat_count(stdout) > 0
     detected = any(e["Id"] in (1116, 1117) for e in events)
     if any(e["Id"] in (1002, 1005) for e in events):
@@ -242,7 +244,16 @@ def scan_zip(zip_path, scanner, run=subprocess.run):
                     prefix=f"odekake-scan-{os.path.splitext(os.path.basename(zip_path))[0]}-"
                 )
                 folder = long_path(folder)
-                extract_payload(zip_path, folder, run)
+                try:
+                    extract_payload(zip_path, folder, run)
+                except Exception as extraction_error:
+                    try:
+                        events = select_events(read_events(start, run), folder)
+                    except Exception as event_error:
+                        raise BuildError(
+                            f"{extraction_error}\nCannot collect Defender events after extraction failed: {event_error}"
+                        ) from event_error
+                    raise
                 result = run(
                     [scanner, "-Scan", "-ScanType", "3", "-File", folder],
                     capture_output=True,
@@ -260,11 +271,7 @@ def scan_zip(zip_path, scanner, run=subprocess.run):
                     if prior is not None:
                         message = f"{prior}\n{message}"
                     raise BuildError(message) from error
-            if result.returncode:
-                raise BuildError(f"Defender exited with code {result.returncode}.")
-            if not complete:
-                raise BuildError("Timed out waiting for Defender scan events.")
-            validate_result(result.returncode, stdout, events)
+            validate_result(result.returncode, stdout, events, complete)
         finally:
             prior = sys.exception()
             try:
