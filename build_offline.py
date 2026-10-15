@@ -266,6 +266,7 @@ class Build:
 
         # --- Work folder and source ---
         if cfg["source"] == "remote":
+            source.assert_remote_project_root(root)
             prepare_work_folder()
             clone_dir = os.path.join(WORK_DIR, "source")
             sha = source.clone_remote_source(root, clone_dir, cfg["remoteRef"])

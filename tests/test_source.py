@@ -100,7 +100,7 @@ def test_fetch_failure_does_not_use_cached_ref(repository, tmp_path):
     assert not (tmp_path / "clone").exists()
 
 
-def test_remote_subfolder_is_rejected_before_fetch(repository, tmp_path):
+def test_remote_subfolder_is_rejected_before_fetch(repository, tmp_path, monkeypatch):
     root, _ = repository
     subfolder = root / "app"
     subfolder.mkdir()
@@ -110,6 +110,17 @@ def test_remote_subfolder_is_rejected_before_fetch(repository, tmp_path):
         clone_remote_source(str(subfolder), str(tmp_path / "clone"), "origin/main")
     assert git(root, "for-each-ref", "refs/remotes") == refs_before
     assert not (tmp_path / "clone").exists()
+    work = tmp_path / "work"
+    work.mkdir()
+    marker = work / "previous-failure"
+    marker.write_text("keep", encoding="utf-8")
+    monkeypatch.setattr(build_offline, "WORK_DIR", str(work))
+    args, given = build_offline.parse_arguments(
+        ["--project-root", str(subfolder), "--source", "remote"]
+    )
+    with pytest.raises(BuildError, match="repository top level"):
+        build_offline.Build(args, given).run()
+    assert marker.read_text() == "keep"
 
 
 def test_deleted_remote_branch_does_not_use_cached_ref(repository, tmp_path):

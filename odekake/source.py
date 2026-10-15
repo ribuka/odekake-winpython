@@ -7,8 +7,8 @@ from odekake import BuildError, log
 from odekake.project import read_toml
 
 
-def clone_remote_source(root: str, destination: str, remote_ref: str) -> str:
-    """Fetches a remote branch and checks out its exact commit in a local clone."""
+def assert_remote_project_root(root: str) -> None:
+    """Rejects unsupported subfolder projects before changing build state."""
     prefix = log.run(
         "git", ["-C", root, "rev-parse", "--show-prefix"], capture=True
     ).strip()
@@ -17,6 +17,11 @@ def clone_remote_source(root: str, destination: str, remote_ref: str) -> str:
             "Remote source requires a project at the repository top level; "
             "projects in repository subfolders are not supported."
         )
+
+
+def clone_remote_source(root: str, destination: str, remote_ref: str) -> str:
+    """Fetches a remote branch and checks out its exact commit in a local clone."""
+    assert_remote_project_root(root)
     remotes = log.run("git", ["-C", root, "remote"], capture=True).splitlines()
     matches = [name for name in remotes if remote_ref.startswith(name + "/")]
     if not matches:
