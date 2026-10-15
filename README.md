@@ -40,6 +40,8 @@ build-offline.bat --project-root D:\work\myproject
 | オプション | 説明 |
 |---|---|
 | `--project-root <フォルダ>` | 対象プロジェクト。省略するとフォルダ選択ダイアログが出ます |
+| `--source worktree` / `--source remote` | 作業ツリー / fetch したリモートのブランチから作る(既定は `worktree`) |
+| `--remote-ref origin/main` | `remote` のときに使うリモートのブランチ(既定は `origin/main`) |
 | `--output-dir <フォルダ>` | 出力先(既存のフォルダを指定) |
 | `--groups a b` | 含める依存グループ。既定では dev も含めません |
 | `--extras a b` | 含める extras |
@@ -67,6 +69,8 @@ build-offline.bat --project-root D:\work\myproject
 | キー | オプション |
 |---|---|
 | `outputDir` | `--output-dir` |
+| `source` | `--source` |
+| `remoteRef` | `--remote-ref` |
 | `groups` / `extras` / `exclude` | `--groups` / `--extras` / `--exclude` |
 | `trackedOnly` | `--tracked-only` |
 | `includeExportIgnored` | `--include-export-ignored` |
@@ -101,6 +105,33 @@ build-offline.bat --project-root D:\work\myproject
   "initialDir": "%USERPROFILE%\\repos"
 }
 ```
+
+### リモートのブランチから作る
+
+```bat
+build-offline.bat --project-root D:\work\myproject --source remote --remote-ref origin/main
+```
+
+選んだ手元のリポジトリで指定リモートを fetch し、`.build\work\source\` にローカル clone して、そのブランチのコミットから ZIP を作ります。手元のファイルやブランチは変更しませんが、元のリポジトリの remote-tracking ref は更新します。未コミットの変更や未 add のファイルは含めません。名前・バージョン・Python の版・依存・`.gitattributes` も、そのコミットの内容を使います。
+
+毎回リモートから作るには、`config\settings.local.json` に次を書きます。ダブルクリックでも同じ設定が使われ、ダイアログでは clone 元の手元のリポジトリを選びます。
+
+```json
+{
+  "source": "remote",
+  "remoteRef": "origin/main"
+}
+```
+
+- 一度だけ作業ツリーから作るには `--source worktree` を指定します。
+- `origin/master` や `upstream/main` も指定できます。タグ、手元のブランチ、`origin/HEAD` は指定できません。
+- fetch が失敗した場合は停止します。保存済みの古い ref では続けません。
+- `trackedOnly` は併用できますが、clone 先には未 add のファイルがないため結果は変わりません。`exclude` と `includeExportIgnored` は通常どおり使えます。
+- clone 外を指す `uv.lock` の path 依存はエラーにします。リポジトリ内の相対パスのワークスペースメンバーは使えます。
+- サブモジュールの中身は含みません。Git LFS はポインタファイルが入る可能性があります。
+- 作業用 clone は成功時に削除し、失敗時には調査用に残します。
+
+どちらの source でもコミット SHA をログに出し、完了ポップアップにも source と SHA(remote では ref も)を表示します。作業ツリーでは clean / dirty も記録します。dirty(未 add のファイルを含む。gitignore の対象は除く)なら警告しますが、ビルドは続行します。コミットがない場合は `(no commits)` と表示します。
 
 ### 依存のインストール方法
 

@@ -94,6 +94,8 @@ def get_effective_settings(
     Without config_path, reads <repo_root>\\config\\settings.json.
     """
     settings = {key: _default(kind) for key, kind in setting_types.items()}
+    if "remoteRef" in settings:
+        settings["remoteRef"] = "origin/main"
 
     if config_path is not None:
         config_file = resolve_full_path(config_path)

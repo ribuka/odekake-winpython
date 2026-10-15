@@ -14,7 +14,16 @@ import shutil
 import sys
 import traceback
 
-from odekake import BuildError, gui, log, project, remove_tree, settings, winpython
+from odekake import (
+    BuildError,
+    gui,
+    log,
+    project,
+    remove_tree,
+    settings,
+    source,
+    winpython,
+)
 from odekake import zip as ziputil
 
 # ---------------------------------------------------------------------------
@@ -51,6 +60,8 @@ PRUNE_TARGETS = [
 # Setting keys and their types (see settings.SettingType), and the argument name of each key.
 # initialDir is for settings files only and has no argument (use --project-root to specify the folder by argument).
 SETTING_TYPES: dict[str, settings.SettingType] = {
+    "source": ("worktree", "remote"),
+    "remoteRef": "string",
     "pythonVersion": "string",
     "outputDir": "string",
     "trackedOnly": "bool",
@@ -66,6 +77,8 @@ SETTING_TYPES: dict[str, settings.SettingType] = {
     "initialDir": "string",
 }
 OPTION_NAMES = {
+    "source": "--source",
+    "remoteRef": "--remote-ref",
     "pythonVersion": "--python-version",
     "outputDir": "--output-dir",
     "trackedOnly": "--tracked-only",
@@ -124,6 +137,8 @@ def parse_arguments(argv: list[str]) -> tuple[argparse.Namespace, dict[str, obje
         "--config-path", help="settings file (default: config\\settings.json)"
     )
     help_texts = {
+        "source": "build from the worktree or a fetched remote branch (default: worktree)",
+        "remoteRef": "remote branch used by source remote (default: origin/main)",
         "pythonVersion": "Python version such as 3.13 (takes priority over .python-version)",
         "outputDir": "existing folder to write the ZIP to (default: the Downloads folder)",
         "trackedOnly": "include only the files added to git",
@@ -215,10 +230,6 @@ class Build:
         log.write_log(f"Target project: {root}")
         if not os.path.isdir(root):
             raise BuildError(f"Target project folder not found: {root}")
-        for required in ("pyproject.toml", "uv.lock"):
-            if not os.path.isfile(os.path.join(root, required)):
-                raise BuildError(f"{required} not found in the target project: {root}")
-
         for tool in ("git", "uv"):
             if not shutil.which(tool):
                 raise BuildError(f"{tool} not found. Install it and add it to PATH.")
@@ -238,6 +249,26 @@ class Build:
                 "The target project is not a git repository "
                 f"(required because .gitignore decides which files go into the ZIP): {root}"
             )
+
+        # --- Work folder and source ---
+        if os.path.exists(WORK_DIR):
+            log.write_log(f"Removing the previous work folder: {WORK_DIR}")
+            remove_tree(WORK_DIR)
+        os.makedirs(WORK_DIR)
+        if cfg["source"] == "remote":
+            clone_dir = os.path.join(WORK_DIR, "source")
+            sha = source.clone_remote_source(root, clone_dir, cfg["remoteRef"])
+            root = clone_dir
+            provenance = f"Source: remote / Ref: {cfg['remoteRef']} / Commit: {sha}"
+            log.write_log(provenance)
+        else:
+            sha, clean = source.worktree_provenance(root)
+            provenance = f"Source: worktree / Commit: {sha} / Worktree: {'clean' if clean else 'dirty'}"
+        for required in ("pyproject.toml", "uv.lock"):
+            if not os.path.isfile(os.path.join(root, required)):
+                raise BuildError(f"{required} not found in the target project: {root}")
+        if cfg["source"] == "remote":
+            source.assert_internal_path_dependencies(root)
 
         # --- Name and version ---
         py = project.read_pyproject(os.path.join(root, "pyproject.toml"))
@@ -280,9 +311,6 @@ class Build:
         )
 
         # --- Work folder ---
-        if os.path.exists(WORK_DIR):
-            log.write_log(f"Removing the previous work folder: {WORK_DIR}")
-            remove_tree(WORK_DIR)
         stage_dir = os.path.join(WORK_DIR, "stage")
         os.makedirs(stage_dir)
 
@@ -474,7 +502,7 @@ class Build:
         log.write_log(f"Elapsed: {elapsed // 60 % 60:02}:{elapsed % 60:02}")
         log.write_log(f"Log: {log.log_path()}")
 
-        self.result_text = f"Output:\n{zip_path}\n\nSHA-256:\n{sha256}"
+        self.result_text = f"Output:\n{zip_path}\n\nSHA-256:\n{sha256}\n\n{provenance}"
 
 
 def main(argv: list[str]) -> int:
