@@ -95,7 +95,7 @@ def assert_seven_zip_writable(tar: str, work_dir: str) -> None:
     """
     if not os.path.isfile(tar):
         raise BuildError(
-            f"tar.exe, needed to create 7z, not found: {tar}\nSet winPythonArchiveFormat to zip."
+            f"tar.exe, needed to create 7z, not found: {tar}\nSet winpython_archive_format to zip."
         )
     probe_dir = os.path.join(work_dir, "7z-probe")
     probe_7z = os.path.join(work_dir, "7z-probe.7z")
@@ -107,7 +107,7 @@ def assert_seven_zip_writable(tar: str, work_dir: str) -> None:
             new_seven_zip_from_directory(probe_7z, probe_dir, tar)
         except BuildError as e:
             raise BuildError(
-                f"tar.exe on this PC cannot create 7z. Set winPythonArchiveFormat to zip.\n{e}"
+                f"tar.exe on this PC cannot create 7z. Set winpython_archive_format to zip.\n{e}"
             ) from e
     finally:
         remove_tree(probe_dir)

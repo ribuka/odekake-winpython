@@ -294,8 +294,8 @@ def test_defender_preflight_runs_before_project_access(monkeypatch):
 
 
 def test_virus_scan_boolean_arguments():
-    assert parse_arguments(["--virus-scan"])[1]["virusScan"] is True
-    assert parse_arguments(["--no-virus-scan"])[1]["virusScan"] is False
+    assert parse_arguments(["--virus-scan"])[1]["virus_scan"] is True
+    assert parse_arguments(["--no-virus-scan"])[1]["virus_scan"] is False
 
 
 @pytest.mark.parametrize("enabled", [False, True])

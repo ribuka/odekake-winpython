@@ -1,5 +1,0 @@
-{
-  "pruneWinPython": true,
-  "installer": "uv",
-  "virusScan": false
-}

@@ -14,7 +14,7 @@ def _expand_environment_variables(value: str) -> str:
 
 
 def resolve_initial_dir(value: str | None) -> str | None:
-    """Turns the initialDir setting into the path where the folder selection dialog starts (see docs/spec.md).
+    """Turns the initial_dir setting into the path where the folder selection dialog starts (see docs/spec.md).
 
     Returns None if not set (empty). Environment variables (such as %USERPROFILE%) are expanded.
     A relative path is an error (when started from the .bat, its base is unclear).
@@ -25,11 +25,11 @@ def resolve_initial_dir(value: str | None) -> str | None:
     path = _expand_environment_variables(value)
     if not re.match(r"^([A-Za-z]:[\\/]|\\\\)", path):
         raise BuildError(
-            f"Setting 'initialDir' must be an absolute path (C:\\... or \\\\server\\...): '{value}'"
+            f"Setting 'initial_dir' must be an absolute path (C:\\... or \\\\server\\...): '{value}'"
         )
     if not os.path.isdir(path):
         log.write_log(
-            f"The folder in setting 'initialDir' does not exist, so the dialog opens without a start folder: {path}",
+            f"The folder in setting 'initial_dir' does not exist, so the dialog opens without a start folder: {path}",
             color="yellow",
         )
         return None

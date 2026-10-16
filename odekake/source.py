@@ -29,7 +29,7 @@ def clone_remote_source(root: str, destination: str, remote_ref: str) -> str:
     remote = max(matches, key=len)
     branch = remote_ref[len(remote) + 1 :]
     if branch == "HEAD":
-        raise BuildError("remoteRef must name a remote branch, not remote HEAD.")
+        raise BuildError("remote_ref must name a remote branch, not remote HEAD.")
     log.run("git", ["check-ref-format", f"refs/heads/{branch}"])
     # An explicit refspec also handles remotes configured to fetch only one branch.
     log.run(

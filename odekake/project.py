@@ -67,7 +67,7 @@ def get_python_minor(
 ) -> str:
     """Decides the Python minor version (such as 3.13).
 
-    Priority: argument --python-version > .python-version > pythonVersion in the settings file
+    Priority: argument --python-version > .python-version > python_version in the settings file
     """
     from_file = None
     pv_file = os.path.join(root, ".python-version")
@@ -83,10 +83,10 @@ def get_python_minor(
     elif from_file:
         source, raw = ".python-version", from_file
     elif from_settings:
-        source, raw = "pythonVersion in the settings file", from_settings
+        source, raw = "python_version in the settings file", from_settings
     else:
         raise BuildError(
-            ".python-version not found. Specify the version with pythonVersion (--python-version), such as 3.13."
+            ".python-version not found. Specify the version with python_version (--python-version), such as 3.13."
         )
 
     minor = _minor_of(raw)

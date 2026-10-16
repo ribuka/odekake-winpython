@@ -1,7 +1,7 @@
 """Loading settings."""
 
-import json
 import os
+import tomllib
 from collections.abc import Mapping
 
 from odekake import BuildError, log
@@ -40,13 +40,9 @@ def read_settings_file(
     if not text.strip():
         return result
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise BuildError(f"Cannot read the settings file as JSON: {path}\n{e}") from e
-    if not isinstance(data, dict):
-        raise BuildError(
-            f"The top level of the settings file must be a {{ }} object: {path}"
-        )
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as e:
+        raise BuildError(f"Cannot read the settings file as TOML: {path}\n{e}") from e
     for key, value in data.items():
         if key not in setting_types:
             raise BuildError(
@@ -88,11 +84,11 @@ def get_effective_settings(
     repo_root: str,
     defaults: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    """Overrides key by key in the order defaults < settings.json < settings.local.json < arguments.
+    """Overrides key by key in the order defaults < settings.toml < settings.local.toml < arguments.
 
     arguments holds only the arguments given on the command line, keyed by setting key.
     option_names maps a setting key to its argument name (used in error messages).
-    Without config_path, reads <repo_root>\\config\\settings.json.
+    Without config_path, reads <repo_root>\\config\\settings.toml.
     defaults supplies explicit defaults for settings with nonstandard defaults.
     """
     settings = {key: _default(kind) for key, kind in setting_types.items()}
@@ -105,8 +101,8 @@ def get_effective_settings(
                 f"Settings file specified by --config-path not found: {config_file}"
             )
     else:
-        config_file = os.path.join(repo_root, "config", "settings.json")
-    local_file = os.path.join(os.path.dirname(config_file), "settings.local.json")
+        config_file = os.path.join(repo_root, "config", "settings.toml")
+    local_file = os.path.join(os.path.dirname(config_file), "settings.local.toml")
 
     for file in (config_file, local_file):
         settings.update(read_settings_file(file, setting_types))
@@ -114,9 +110,9 @@ def get_effective_settings(
     for key, kind in setting_types.items():
         if key not in arguments:
             continue
-        # pythonVersion has a priority relative to .python-version, so the argument does not override it here
+        # python_version has a priority relative to .python-version, so the argument does not override it here
         # (see project.get_python_minor)
-        if key == "pythonVersion":
+        if key == "python_version":
             continue
         value = arguments[key]
         if isinstance(kind, tuple):

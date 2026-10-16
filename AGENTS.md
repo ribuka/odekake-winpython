@@ -10,7 +10,7 @@ A general-purpose Python script (Windows only) that packages any uv project into
 - `build_offline.py` / `build-offline.bat`: Entry points. The `.bat` launches the script with `uv run`.
 - `odekake/*.py`: Implementation modules (settings, project inspection, WinPython, ZIP, logging, GUI).
 - `pyproject.toml` / `uv.lock`: The tool's own Python requirement and dependencies (runtime: loguru; dev: pytest, ruff).
-- `config/settings.json`: Shared default settings. Per-user overrides go in `config/settings.local.json` (gitignored).
+- `config/settings.toml`: Shared default settings. Per-user overrides go in `config/settings.local.toml` (gitignored).
 - `tests/test_*.py`: pytest unit tests.
 - `.github/workflows/ci.yml`: CI (ruff check and pytest on Ubuntu) for pull requests.
 - `docs/spec.md`: Design notes. Open issues and pending ideas are GitHub issues.
@@ -48,7 +48,7 @@ A general-purpose Python script (Windows only) that packages any uv project into
 
 - Before creating a commit, read `.agents/docs/commit.md` and follow it.
 - Before committing, check that no personal information is included: user names, email addresses, local paths (e.g. `C:\Users\...`), machine names, or tokens.
-- NEVER put personal paths in `config/settings.json`; use `config/settings.local.json` instead.
+- NEVER put personal paths in `config/settings.toml`; use `config/settings.local.toml` instead.
 
 ### Pull request
 
