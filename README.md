@@ -53,6 +53,7 @@ build-offline.bat --project-root D:\work\myproject
 | `--installer uv` / `--installer pip` | 依存を入れる方法(既定は `uv`。下の「依存のインストール方法」を参照) |
 | `--winpython-archive-format zip` / `--winpython-archive-format 7z` | WinPython を入れるアーカイブの形式(既定は `zip`。下の「WinPython のアーカイブ形式」を参照) |
 | `--prune-winpython` / `--no-prune-winpython` | WinPython の不要なファイルを削除する / しない(下の「WinPython の不要なファイルの削除」を参照) |
+| `--virus-scan` / `--no-virus-scan` | 完成した ZIP を Microsoft Defender でスキャンし、証跡を保存する(既定は無効) |
 | `--no-popup` | 終了時のポップアップを出さない |
 | `--config-path <ファイル>` | 設定ファイル(既定は `config\settings.json`。同じフォルダの `settings.local.json` も読みます) |
 
@@ -79,6 +80,7 @@ build-offline.bat --project-root D:\work\myproject
 | `installer` | `--installer` |
 | `winPythonArchiveFormat` | `--winpython-archive-format` |
 | `pruneWinPython` | `--prune-winpython` |
+| `virusScan` | `--virus-scan` |
 | `noPopup` | `--no-popup` |
 | `initialDir` | (なし) |
 
@@ -253,3 +255,11 @@ uv run ruff format --check
 ```
 
 PR では、GitHub Actions(ubuntu)で `ruff check` と pytest が走ります。Windows でしか動かないテストは、ubuntu では飛ばします。
+
+## Microsoft Defender によるスキャン
+
+`--virus-scan` または `"virusScan": true` で有効にします。Defender が Normal モードで有効であることが必要です。ビルドの開始時に確認し、無効なら停止します。
+
+完成した ZIP を一時フォルダへ展開し、内側の WinPython も展開してスキャンします。証跡は ZIP の隣の `<ZIP名>.scan.txt` に UTF-8(BOM なし)で保存します。標準出力と関連する Defender イベントの本文を含み、ユーザー名やパスもそのまま記録されます。持ち出し申請には ZIP とこのファイルを添付してください。
+
+脅威、判定の不一致、証跡の不足、実行エラーはビルド失敗となります。失敗時も取得できた証跡を保存し、外側 ZIP はスクリプトでは削除しません。ただし Defender 自身が ZIP を隔離する可能性があります。一時フォルダは成功・失敗にかかわらず削除します。
