@@ -115,8 +115,8 @@ build-offline.bat --project-root D:\work\myproject --source remote --remote-ref 
 毎回リモートから作るには、`config\settings.local.toml` に次を書きます。ダブルクリックでも同じ設定が使われ、ダイアログでは clone 元の手元のリポジトリを選びます。
 
 ```toml
-source = 'remote'
-remote_ref = 'origin/main'
+source = "remote"
+remote_ref = "origin/main"
 ```
 
 - 一度だけ作業ツリーから作るには `--source worktree` を指定します。
@@ -142,7 +142,7 @@ index の認証は、普段の `uv sync` と同じもの(`UV_INDEX_<NAME>_USERNA
 uv で問題が出たときは、従来の pip でも入れられます。
 
 ```toml
-installer = 'pip'
+installer = "pip"
 ```
 
 pip では、PyPI 以外の index にあるパッケージは入りません。そうした依存があると、WinPython をダウンロードする前にエラーで止まります。
@@ -154,7 +154,7 @@ pip では、PyPI 以外の index にあるパッケージは入りません。�
 `winpython_archive_format = "7z"` にすると、代わりに `winpython.7z` を入れます。zip より 4 割ほど小さくなります。
 
 ```toml
-winpython_archive_format = '7z'
+winpython_archive_format = "7z"
 ```
 
 - 7z は Windows 標準の `C:\Windows\System32\tar.exe` で作ります。7-Zip は要りません。
