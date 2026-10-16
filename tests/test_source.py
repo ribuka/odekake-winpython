@@ -193,12 +193,12 @@ def test_worktree_clean_dirty_and_ignored_files(repository, logs):
     (root / "ignored").write_text("ignored", encoding="utf-8")
     assert worktree_provenance(str(root))[1]
     (root / "new").write_text("new", encoding="utf-8")
-    with pytest.raises(BuildError, match="1 files have uncommitted changes"):
+    with pytest.raises(BuildError, match="Changed files: 1"):
         worktree_provenance(str(root))
     assert not any("Warning:" in message for message in logs)
     (root / "new").unlink()
     (root / "code.py").write_text("dirty", encoding="utf-8")
-    with pytest.raises(BuildError, match="1 files have uncommitted changes"):
+    with pytest.raises(BuildError, match="Changed files: 1"):
         worktree_provenance(str(root))
 
 
@@ -334,7 +334,7 @@ def test_unborn_project_is_dirty(repository, tmp_path, staged):
         (root / name).write_text("", encoding="utf-8")
     if staged:
         git(root, "add", ".")
-    with pytest.raises(BuildError, match="2 files have uncommitted changes"):
+    with pytest.raises(BuildError, match="Changed files: 2"):
         worktree_provenance(str(root))
 
 
@@ -346,7 +346,7 @@ def test_counts_rename_and_untracked_files_without_exposing_paths(repository, lo
     for name in ("a file.txt", "日本語.txt"):
         (root / "private folder" / name).write_text("extra", encoding="utf-8")
     git(root, "config", "status.showUntrackedFiles", "no")
-    with pytest.raises(BuildError, match="4 files have uncommitted changes") as error:
+    with pytest.raises(BuildError, match="Changed files: 4") as error:
         worktree_provenance(str(root))
     output = "\n".join(logs) + str(error.value)
     for name in ("code.py", "hidden", "private", "日本語", "a file.txt"):
@@ -382,5 +382,5 @@ def test_dirty_build_stops_before_preparation(repository, tmp_path, monkeypatch,
     monkeypatch.setattr(build_offline, "prepare_work_folder", unexpected)
     monkeypatch.setattr(build_offline.winpython, "get_winpython_archive", unexpected)
     args, given = build_offline.parse_arguments(["--project-root", str(target)])
-    with pytest.raises(BuildError, match="1 files have uncommitted changes"):
+    with pytest.raises(BuildError, match="Changed files: 1"):
         build_offline.Build(args, given).run()

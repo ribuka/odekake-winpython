@@ -93,7 +93,7 @@ def worktree_provenance(root: str) -> tuple[str, bool]:
     log.write_log(worktree_summary(sha, clean))
     if not clean:
         raise BuildError(
-            f"The worktree is not clean: {changed} files have uncommitted changes "
+            f"The worktree is not clean. Changed files: {changed} "
             "(including untracked files). Commit or remove the changes before building."
         )
     return sha, clean

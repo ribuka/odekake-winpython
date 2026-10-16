@@ -133,7 +133,7 @@ build-offline.bat --project-root D:\work\myproject --source remote --remote-ref 
 - サブモジュールの中身は含みません。Git LFS はポインタファイルが入る可能性があります。
 - 作業用 clone は成功時に削除し、失敗時には調査用に残します。
 
-どちらの source でもコミット SHA をログに出し、完了ポップアップにも source と SHA(remote では ref も)を表示します。作業ツリーでは clean / dirty も記録します。作業ツリーが clean でない場合は、WinPython の準備より前にエラーで停止します。`git status --porcelain` の出力が空であることが必須で、未コミットの変更と未 add のファイルが対象です。gitignore の対象は数えません。エラーには概要とファイル件数だけを出し、ファイル名や差分は出しません。サブフォルダを選んだ場合もリポジトリ全体を確認します。コミットがないプロジェクトも、必須ファイルが未コミットのため停止します。
+どちらの source でもコミット SHA をログに出し、完了ポップアップにも source と SHA(remote では ref も)を表示します。作業ツリーでは clean / dirty も記録します。作業ツリーが clean でない場合は、WinPython の準備より前にエラーで停止します。`git status --porcelain --untracked-files=all` の出力が空であることが必須で、未コミットの変更と未 add のファイルが対象です。Git の未追跡ファイルの表示設定にかかわらず検査します。gitignore の対象は数えません。エラーには概要とファイル件数だけを出し、ファイル名や差分は出しません。サブフォルダを選んだ場合もリポジトリ全体を確認します。コミットがないプロジェクトも、必須ファイルが未コミットのため停止します。
 
 `trackedOnly` 設定と `--tracked-only` / `--no-tracked-only` は廃止しました。以前の設定ファイルに `trackedOnly` がある場合は削除してください。clean の条件を解除するオプションはありません。
 
