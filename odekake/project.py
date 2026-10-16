@@ -107,7 +107,6 @@ def get_python_minor(
 
 def get_project_files(
     root: str,
-    tracked_only: bool,
     exclude: list[str],
     include_export_ignored: bool = False,
 ) -> list[str]:
@@ -116,8 +115,7 @@ def get_project_files(
     If include_export_ignored is false, files marked export-ignore in .gitattributes are left out (issue #12).
     """
     git_args = ["-C", root, "-c", "core.quotepath=off", "ls-files", "-z", "--cached"]
-    if not tracked_only:
-        git_args += ["--others", "--exclude-standard"]
+    git_args += ["--others", "--exclude-standard"]
     git_args += ["--", "."]
     git_args += [f":(exclude,glob){pattern}" for pattern in exclude]
 

@@ -231,20 +231,10 @@ class TestGetProjectFiles:
     def test_includes_files_not_yet_added_but_not_gitignored_files_by_default(
         self, regular
     ):
-        files = get_project_files(regular, False, [])
+        files = get_project_files(regular, [])
         assert "new.py" in files
         assert "src/pkg/__init__.py" in files
         assert "ignored.txt" not in files
-
-    def test_returns_only_added_files_with_tracked_only(self, regular):
-        assert sorted(get_project_files(regular, True, [])) == [
-            ".gitignore",
-            "debug.log",
-            "pyproject.toml",
-            "src/pkg/__init__.py",
-            "sub/deep.log",
-            "tests/test_a.py",
-        ]
 
     @pytest.mark.parametrize(
         ("pattern", "excluded", "kept"),
@@ -255,17 +245,17 @@ class TestGetProjectFiles:
         ],
     )
     def test_exclude(self, regular, pattern, excluded, kept):
-        files = get_project_files(regular, False, [pattern])
+        files = get_project_files(regular, [pattern])
         assert not set(excluded) & set(files)
         assert set(kept) <= set(files)
 
     def test_returns_japanese_file_names_as_they_are(self, regular):
-        assert "日本語 のファイル.txt" in get_project_files(regular, False, [])
+        assert "日本語 のファイル.txt" in get_project_files(regular, [])
 
     def test_skips_deleted_files(self, new_git_project, logs):
         root = new_git_project(["keep.txt", "gone.txt"])
         os.remove(os.path.join(root, "gone.txt"))
-        assert get_project_files(root, False, []) == ["keep.txt"]
+        assert get_project_files(root, []) == ["keep.txt"]
         assert logs.count("Skipped (not an existing file): gone.txt") == 1
 
     @pytest.mark.parametrize(
@@ -279,14 +269,14 @@ class TestGetProjectFiles:
         with pytest.raises(
             BuildError, match=f"^The target project has '{rel}', which conflicts "
         ):
-            get_project_files(root, False, [])
+            get_project_files(root, [])
 
     def test_fails_when_there_are_no_files(self, new_git_project):
         root = new_git_project([])
         with pytest.raises(
             BuildError, match=r"^There are no files to put into the ZIP\.$"
         ):
-            get_project_files(root, False, [])
+            get_project_files(root, [])
 
 
 class TestGetProjectFilesExportIgnore:
@@ -333,7 +323,7 @@ class TestGetProjectFilesExportIgnore:
         return root
 
     def test_leaves_out_export_ignore_files_and_folders_by_default(self, root):
-        assert sorted(get_project_files(root, False, [])) == [
+        assert sorted(get_project_files(root, [])) == [
             "a/tests/x.py",
             "keep.py",
             "pkg/main.py",
@@ -342,7 +332,7 @@ class TestGetProjectFilesExportIgnore:
         ]
 
     def test_includes_them_with_include_export_ignored(self, root):
-        files = get_project_files(root, False, [], True)
+        files = get_project_files(root, [], True)
         for rel in [
             "tests/sub/test_b.py",
             "tests/new_test.py",
@@ -355,12 +345,12 @@ class TestGetProjectFilesExportIgnore:
         assert len(files) == 18
 
     def test_logs_the_files_left_out(self, root, logs):
-        get_project_files(root, False, [])
+        get_project_files(root, [])
         assert logs.count("Excluded (export-ignore): tests/sub/test_b.py") == 1
         assert logs.count("Excluded (export-ignore): 日本語/除外.txt") == 1
 
-    def test_works_together_with_tracked_only_and_exclude(self, root):
-        assert sorted(get_project_files(root, True, ["keep.py"])) == [
+    def test_works_together_with_exclude(self, root):
+        assert sorted(get_project_files(root, ["keep.py"])) == [
             "a/tests/x.py",
             "pkg/main.py",
             "unset.txt",
@@ -374,14 +364,14 @@ def test_does_not_report_a_conflict_for_an_export_ignore_winpython_zip(new_git_p
         os.path.join(root, ".gitattributes"),
         "winpython.zip export-ignore\n/winpython/ export-ignore\n",
     )
-    assert sorted(get_project_files(root, False, [])) == [".gitattributes", "a.txt"]
+    assert sorted(get_project_files(root, [])) == [".gitattributes", "a.txt"]
 
 
 def test_fails_when_everything_is_export_ignore(new_git_project):
     root = new_git_project([".gitattributes", "a.txt"])
     write_text(os.path.join(root, ".gitattributes"), "* export-ignore\n")
     with pytest.raises(BuildError, match=r"^There are no files to put into the ZIP\.$"):
-        get_project_files(root, False, [])
+        get_project_files(root, [])
 
 
 def test_queries_many_paths_with_a_single_check_attr_call(new_git_project, monkeypatch):
@@ -400,7 +390,7 @@ def test_queries_many_paths_with_a_single_check_attr_call(new_git_project, monke
             calls.append(args) or original_run(file_path, args, **kw)
         ),
     )
-    files = get_project_files(root, False, [])
+    files = get_project_files(root, [])
     assert len(files) == 360
     assert "dir_400/file_with_a_long_name_400.txt" not in files
     assert "dir_007/file_with_a_long_name_007.txt" not in files
