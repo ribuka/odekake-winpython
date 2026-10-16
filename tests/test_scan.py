@@ -322,6 +322,8 @@ def test_build_scans_after_cleanup_before_done(monkeypatch, tmp_path, logs, enab
     monkeypatch.setattr(build.log, "log_path", lambda: "build.log")
 
     def run(exe, args, **kwargs):
+        if "status" in args:
+            return ""
         if "--output-file" in args:
             Path(args[args.index("--output-file") + 1]).write_text("", encoding="utf-8")
         return "true" if "rev-parse" in args else "tool"
