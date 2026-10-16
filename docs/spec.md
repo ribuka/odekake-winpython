@@ -67,7 +67,7 @@
 - `version` が dynamic のときは、対象プロジェクトの `VERSION` ファイル(1行)から読む。
 - 名前の変換:
   - ZIP 名とログ名には、`name` の `_` を `-` に置き換えたものを使う(リポジトリのフォルダ名に寄せる)。
-  - 動作確認で import する名前には、`name` の `-` を `_` に置き換えたものを使う。`importName` で上書きできる。
+  - 動作確認で import する名前には、`name` の `-` を `_` に置き換えたものを使う。`import_name` で上書きできる。
 - ZIP 名には常にタイムスタンプを付ける。出力を上書きすることがない。
 - 出力先の既定は、Windows の既知フォルダ(Downloads)として `SHGetKnownFolderPath` で取得する。`%USERPROFILE%\Downloads` と決め打ちにしないのは、フォルダを移している環境があるため。
 
@@ -75,9 +75,9 @@
 
 - `source` は `worktree` / `remote` の選択式にした。ref 文字列だけではソース選択の意図が伝わらず、設定ファイルの remote を引数で worktree に戻す方法も必要なため。共通設定には remote を書かず、従来の挙動を既定に保つ。
 - リモートから作る場合は、手元のリポジトリを fetch してローカル clone する。既存の git 認証を使い、clone 先でも `git ls-files` / `git check-attr` による収集を再利用するため。URL からの直接 clone は認証・GUI・キャッシュの検討が増えるので採らない。
-- `git archive` は採らない。展開先が git リポジトリにならず、既存の収集処理を使えないうえ、export-ignore を必ず適用して `includeExportIgnored` を実現しにくいため。
+- `git archive` は採らない。展開先が git リポジトリにならず、既存の収集処理を使えないうえ、export-ignore を必ず適用して `include_export_ignored` を実現しにくいため。
 - 対象はリモートのブランチだけに限る。タグやローカルブランチは「リモートと同じ内容を使う」という目的から外れる。リモート名に `/` がありうるため一覧と最長一致で照合し、そのリモートの対象ブランチを明示的な refspec で fetch する。限定された fetch 設定でも対象を取得し、削除済みブランチや通信失敗時に古い ref を使わないため。
-- clone は `--no-checkout --no-hardlinks` とし、fetch 後に `refs/remotes/<remoteRef>^{commit}` で解決した SHA を detached HEAD でチェックアウトする。オブジェクトを独立したコピーにし、元のブランチを変更しないため。`--shared` と `--depth` は使わない。
+- clone は `--no-checkout --no-hardlinks` とし、fetch 後に `refs/remotes/<remote_ref>^{commit}` で解決した SHA を detached HEAD でチェックアウトする。オブジェクトを独立したコピーにし、元のブランチを変更しないため。`--shared` と `--depth` は使わない。
 - clone 外の path 依存は、相対パスの意味が変わるため事前に拒否する。絶対パスも元の作業ツリーを参照しうるため拒否する。clone 内の相対パスはワークスペースのため許容する。作業ツリーモードの依存処理は変えない。
 - 作業ツリーの clean は必須とし、解除オプションを設けない(issue #32)。警告だけでは未コミットの変更や試作ファイルの混入を防げず、成果物の出所をコミット SHA で説明しにくいため。コミットがない場合も必須ファイルが未コミットとなるので、特別扱いしない。
 - clean でない理由は概要とファイル件数だけを伝える。ファイル名や差分の列挙は採らない(利用者の選択、issue #32)。件数は未追跡ディレクトリをまとめずファイル単位とし、リネームは移動前後で二重に数えない。
@@ -127,7 +127,7 @@
 - PyPI のミラーを既定の index にしている環境(`UV_DEFAULT_INDEX` など)では、PyPI のパッケージでもエラーになる。(推測) その場合は uv モードを使う。
 - ハッシュは外さない。PyPI に同名のパッケージがあっても、ハッシュが合わないので誤って入ることはない。
 
-## WinPython のアーカイブ形式(winPythonArchiveFormat)
+## WinPython のアーカイブ形式(winpython_archive_format)
 
 - 既定は zip。PowerShell の `Expand-Archive` は 7z を扱えず、搬入先が Windows 10 や古いビルドだと 7-Zip が要るため(issue #13)。
 - 7z は、Windows に標準で入っている `%SystemRoot%\System32\tar.exe`(bsdtar)で作る。7-Zip は使わない。追加で何も入れなくてよいことを優先した。7-Zip で作るより 4% ほど大きくなる。
@@ -136,26 +136,26 @@
 - 7z を作れないときは、zip に切り替えずにエラーで止める。WinPython をダウンロードする前に、小さな 7z を試しに作って確かめる。
 - 外側 ZIP の中では、winpython.zip / winpython.7z を無圧縮(stored)で格納する。すでに圧縮されているため。
 
-## WinPython の不要なファイルの削除(pruneWinPython)
+## WinPython の不要なファイルの削除(prune_winpython)
 
 - 目的は容量の削減ではなく、展開したときに目に入るノイズを減らすこと。対象は WinPython の最上位の階層だけ。削除するものは `build_offline.py` の `PRUNE_TARGETS`。
-- スクリプトの既定値は false のまま、コミットする `config\settings.json` で true にする。真偽値を「既定が false になる向き」で名付ける決まりを崩さずに、通常は削除するため。
+- スクリプトの既定値は false のまま、コミットする `config\settings.toml` で true にする。真偽値を「既定が false になる向き」で名付ける決まりを崩さずに、通常は削除するため。
 
 ## 設定
 
-- 形式は JSON。PowerShell 版のときに、YAML と TOML は標準のパーサーがない、psd1 はなじみがない、という理由で選んだ。Python に移ったあとも、既存の設定ファイルとの互換のため JSON のまま。
-- `config\settings.json`(コミットする、共通)と `config\settings.local.json`(gitignore、個人用)を、このリポジトリに置く。対象プロジェクトを汚さないため。
-- 優先順位は、**引数 > settings.local.json > settings.json > 既定値**。キー単位で上書きする。
+- 形式は TOML。Python 3.11 以上の標準ライブラリ `tomllib` で読め、依存を増やさずにコメントと Windows パスのリテラル文字列を使えるため。PowerShell 版では標準パーサーの都合で JSON を選んだが、Python 版ではその制約がない(issue #31)。
+- キーは snake_case とし、引数名から機械的に対応づける。`winpython` は引数に合わせて1語とする。後方互換を持たないという利用者の決定(issue #31、2026-10-16)に従い、旧 JSON は無警告で無視し、旧 camelCase キーに新しい名前の案内は出さない。旧キーの専用分岐を設けず、通常の未知キー検証を共用する。警告や名前の案内を採らなかった判断理由自体は issue に記録されていないため、推測で補わない。
+- `config\settings.toml`(コミットする、共通)と `config\settings.local.toml`(gitignore、個人用)を、このリポジトリに置く。対象プロジェクトを汚さないため。
 - プロジェクトごとの設定欄は設けない。プロジェクトごとの指定(`groups`, `extras`, `exclude` など)は引数で渡す。
 - 真偽値は、既定が false になる向きで名付ける。引数は `--x` / `--no-x` の両方を受け付け、設定ファイルの値をどちらの向きにも上書きできる。
 - 未知のキーはエラーにする(打ち間違いを見つけるため)。大文字小文字だけが違うキーもエラー。決まった値だけを受け付ける項目(`installer` など)も、大文字小文字を区別する。
-- `projectRoot` と `configPath` は設定キーにしない。設定ファイルの場所がそれらで決まるため。
-- `outputDir` のフォルダがなければエラーにする。打ち間違いで意図しないフォルダを作らないため。
+- `project_root` と `config_path` は設定キーにしない。設定ファイルの場所がそれらで決まるため。
+- `output_dir` のフォルダがなければエラーにする。打ち間違いで意図しないフォルダを作らないため。
 - 配列の引数は、カンマ区切り(`--groups a,b`)も受け付ける。PowerShell 版の `-Groups a,b` と同じ書き方ができるように残した。
 
-### initialDir
+### initial_dir
 
-- フォルダ選択ダイアログの初期位置。個人のパスになるので、`settings.local.json` に書く。
+- フォルダ選択ダイアログの初期位置。個人のパスになるので、`settings.local.toml` に書く。
 - 引数は設けない。引数で指定するなら `--project-root` を使えばよいため。
 - 環境変数は `%NAME%` の形だけを展開する。`$NAME` は展開しない(`\\server\c$` などを壊さないため)。
 - 相対パスはエラーにする。.bat から起動すると基準が分かりにくいため。展開できなかった環境変数が残って相対パスになった場合も同じ。
@@ -239,7 +239,7 @@
 
 - .bat に `--project "%~dp0"` と書くと、末尾の `\"` がエスケープとして読まれ、`--project` の値がコマンド行の残り全部になって失敗した。`"%~dp0."` にすると動く。
 - `SHGetKnownFolderPath` で取ったダウンロードフォルダは、シェルの `shell:Downloads` と同じパスだった。
-- `build-offline.bat` をダブルクリックすると、フォルダ選択ダイアログ(tkinter)がコンソールの前面に出て、`initialDir` のフォルダで開いた。完了時のポップアップは最前面に出た(ユーザーが確認)。
+- `build-offline.bat` をダブルクリックすると、フォルダ選択ダイアログ(tkinter)がコンソールの前面に出て、`initialDir`(当時のキー名)のフォルダで開いた。完了時のポップアップは最前面に出た(ユーザーが確認)。
 - PowerShell 版と Python 版で同じ試験用プロジェクトを4通りの設定でビルドし、外側 ZIP と winpython の中身(名前とサイズ)が一致した。違ったのは、外側 ZIP の中の winpython.zip の格納方法だけだった(PowerShell 版は deflate の無圧縮ブロック、Python 版は stored)。
 
 ---

@@ -1,4 +1,4 @@
-"""Tests for odekake/settings.py. Writes settings.json / settings.local.json into a temporary folder and calls the functions."""
+"""Tests for odekake/settings.py. Writes settings.toml / settings.local.toml into a temporary folder and calls the functions."""
 
 import os
 
@@ -10,14 +10,14 @@ from odekake import BuildError
 from odekake.settings import get_effective_settings, read_settings_file
 
 
-def new_config_dir(folder, settings_json=None, local_json=None) -> str:
+def new_config_dir(folder, settings_toml=None, local_toml=None) -> str:
     """Writes settings files into <folder>\\config. A file whose value is None is not created. Returns folder."""
     config = os.path.join(folder, "config")
     os.makedirs(config, exist_ok=True)
-    if settings_json is not None:
-        write_text(os.path.join(config, "settings.json"), settings_json)
-    if local_json is not None:
-        write_text(os.path.join(config, "settings.local.json"), local_json)
+    if settings_toml is not None:
+        write_text(os.path.join(config, "settings.toml"), settings_toml)
+    if local_toml is not None:
+        write_text(os.path.join(config, "settings.local.toml"), local_toml)
     return str(folder)
 
 
@@ -36,26 +36,26 @@ class TestGetEffectiveSettings:
     def test_returns_the_defaults_without_settings_files(self, tmp_path):
         cfg = effective({}, tmp_path)
         assert sorted(cfg) == sorted(SETTING_TYPES)
-        assert cfg["pythonVersion"] is None
-        assert cfg["outputDir"] is None
-        assert cfg["includeExportIgnored"] is False
-        assert cfg["pruneWinPython"] is False
+        assert cfg["python_version"] is None
+        assert cfg["output_dir"] is None
+        assert cfg["include_export_ignored"] is False
+        assert cfg["prune_winpython"] is False
         assert cfg["groups"] == []
         assert cfg["installer"] == "uv"
-        assert cfg["winPythonArchiveFormat"] == "zip"
+        assert cfg["winpython_archive_format"] == "zip"
         assert cfg["source"] == "worktree"
-        assert cfg["remoteRef"] == "origin/main"
+        assert cfg["remote_ref"] == "origin/main"
 
     def test_source_arguments_override_remote_settings(self, tmp_path):
         root = new_config_dir(
-            tmp_path, '{"source": "remote", "remoteRef": "upstream/main"}'
+            tmp_path, 'source = "remote"\nremote_ref = "upstream/main"'
         )
         _args, given = parse_arguments(
             ["--source", "worktree", "--remote-ref", "origin/master"]
         )
         cfg = effective(given, root)
         assert cfg["source"] == "worktree"
-        assert cfg["remoteRef"] == "origin/master"
+        assert cfg["remote_ref"] == "origin/master"
         assert effective({}, root)["source"] == "remote"
 
     @pytest.mark.parametrize("value", ["REMOTE", "local", ""])
@@ -64,41 +64,42 @@ class TestGetEffectiveSettings:
             effective({"source": value}, tmp_path)
 
     def test_rejects_invalid_source_and_remote_ref_settings(self, tmp_path):
-        root = new_config_dir(tmp_path, '{"source": "REMOTE"}')
+        root = new_config_dir(tmp_path, 'source = "REMOTE"')
         with pytest.raises(BuildError, match="Setting 'source' must be one of"):
             effective({}, root)
-        root = new_config_dir(tmp_path, '{"remoteRef": false}')
-        with pytest.raises(BuildError, match="Setting 'remoteRef' must be a string"):
+        root = new_config_dir(tmp_path, "remote_ref = false")
+        with pytest.raises(BuildError, match="Setting 'remote_ref' must be a string"):
             effective({}, root)
 
-    def test_reads_config_settings_json_without_config_path(self, tmp_path):
-        root = new_config_dir(tmp_path, '{ "outputDir": "D:\\\\out" }')
-        assert effective({}, root)["outputDir"] == "D:\\out"
+    def test_reads_config_settings_toml_without_config_path(self, tmp_path):
+        root = new_config_dir(tmp_path, 'output_dir = "D:\\\\out"')
+        assert effective({}, root)["output_dir"] == "D:\\out"
 
     def test_merges_key_by_key_with_priority(self, tmp_path):
-        # argument > settings.local.json > settings.json > defaults
+        # argument > settings.local.toml > settings.toml > defaults
         root = new_config_dir(
             tmp_path,
-            '{ "outputDir": "from-settings", "importName": "from_settings", "groups": ["s"], "extras": ["s"], '
-            '"includeExportIgnored": true }',
-            '{ "outputDir": "from-local", "groups": ["l"], "extras": ["l"] }',
+            'output_dir = "from-settings"\nimport_name = "from_settings"\ngroups = ["s"]\nextras = ["s"]\ninclude_export_ignored = true',
+            'output_dir = "from-local"\ngroups = ["l"]\nextras = ["l"]',
         )
-        config_path = os.path.join(root, "config", "settings.json")
+        config_path = os.path.join(root, "config", "settings.toml")
         cfg = effective({"groups": ["arg"]}, "C:\\nowhere", config_path)
         assert cfg["groups"] == ["arg"]
         assert cfg["extras"] == ["l"]
-        assert cfg["outputDir"] == "from-local"
-        assert cfg["importName"] == "from_settings"
-        assert cfg["includeExportIgnored"] is True
-        assert cfg["noPopup"] is False
+        assert cfg["output_dir"] == "from-local"
+        assert cfg["import_name"] == "from_settings"
+        assert cfg["include_export_ignored"] is True
+        assert cfg["no_popup"] is False
 
     def test_bool_arguments_override_the_settings_file_both_ways(self, tmp_path):
         root = new_config_dir(
-            tmp_path, '{ "includeExportIgnored": false, "pruneWinPython": true }'
+            tmp_path, "include_export_ignored = false\nprune_winpython = true"
         )
-        cfg = effective({"includeExportIgnored": True, "pruneWinPython": False}, root)
-        assert cfg["includeExportIgnored"] is True
-        assert cfg["pruneWinPython"] is False
+        cfg = effective(
+            {"include_export_ignored": True, "prune_winpython": False}, root
+        )
+        assert cfg["include_export_ignored"] is True
+        assert cfg["prune_winpython"] is False
 
     def test_splits_comma_separated_array_arguments(self, tmp_path):
         cfg = effective({"groups": ["a,b"], "extras": [" x , y", "z", ","]}, tmp_path)
@@ -107,11 +108,11 @@ class TestGetEffectiveSettings:
 
     def test_does_not_override_with_the_python_version_argument(self, tmp_path):
         # Handled by project.get_python_minor
-        root = new_config_dir(tmp_path, '{ "pythonVersion": "3.12" }')
-        assert effective({"pythonVersion": "3.14"}, root)["pythonVersion"] == "3.12"
+        root = new_config_dir(tmp_path, 'python_version = "3.12"')
+        assert effective({"python_version": "3.14"}, root)["python_version"] == "3.12"
 
     def test_switches_installer_with_the_settings_file_and_the_argument(self, tmp_path):
-        root = new_config_dir(tmp_path, '{ "installer": "pip" }')
+        root = new_config_dir(tmp_path, 'installer = "pip"')
         assert effective({}, root)["installer"] == "pip"
         assert effective({"installer": "uv"}, root)["installer"] == "uv"
 
@@ -127,10 +128,12 @@ class TestGetEffectiveSettings:
     def test_switches_winpython_archive_format_with_the_settings_file_and_the_argument(
         self, tmp_path
     ):
-        root = new_config_dir(tmp_path, '{ "winPythonArchiveFormat": "7z" }')
-        assert effective({}, root)["winPythonArchiveFormat"] == "7z"
+        root = new_config_dir(tmp_path, 'winpython_archive_format = "7z"')
+        assert effective({}, root)["winpython_archive_format"] == "7z"
         assert (
-            effective({"winPythonArchiveFormat": "zip"}, root)["winPythonArchiveFormat"]
+            effective({"winpython_archive_format": "zip"}, root)[
+                "winpython_archive_format"
+            ]
             == "zip"
         )
 
@@ -138,22 +141,22 @@ class TestGetEffectiveSettings:
     def test_fails_on_an_invalid_winpython_archive_format_argument(
         self, value, tmp_path
     ):
-        expected = 'Setting \'winPythonArchiveFormat\' must be one of "zip" / "7z" (argument --winpython-archive-format)'
+        expected = 'Setting \'winpython_archive_format\' must be one of "zip" / "7z" (argument --winpython-archive-format)'
         with pytest.raises(BuildError) as e:
-            effective({"winPythonArchiveFormat": value}, tmp_path)
+            effective({"winpython_archive_format": value}, tmp_path)
         assert expected in str(e.value)
 
-    def test_initial_dir_is_empty_by_default_and_can_be_set_in_settings_local_json(
+    def test_initial_dir_is_empty_by_default_and_can_be_set_in_settings_local_toml(
         self, tmp_path
     ):
-        assert effective({}, tmp_path / "none")["initialDir"] is None
+        assert effective({}, tmp_path / "none")["initial_dir"] is None
         root = new_config_dir(
-            tmp_path / "initialdir", None, '{ "initialDir": "%USERPROFILE%\\\\repos" }'
+            tmp_path / "initialdir", None, 'initial_dir = "%USERPROFILE%\\\\repos"'
         )
-        assert effective({}, root)["initialDir"] == "%USERPROFILE%\\repos"
+        assert effective({}, root)["initial_dir"] == "%USERPROFILE%\\repos"
 
     def test_fails_when_the_config_path_file_does_not_exist(self, tmp_path):
-        missing = str(tmp_path / "missing" / "settings.json")
+        missing = str(tmp_path / "missing" / "settings.toml")
         with pytest.raises(BuildError) as e:
             effective({}, tmp_path, missing)
         assert (
@@ -164,90 +167,119 @@ class TestGetEffectiveSettings:
 
 class TestReadSettingsFile:
     @staticmethod
-    def read_json(tmp_path, text):
-        path = tmp_path / "settings.json"
+    def read_toml(tmp_path, text):
+        path = tmp_path / "settings.toml"
         write_text(path, text)
         return read_settings_file(str(path), SETTING_TYPES)
 
     def test_returns_nothing_when_the_file_does_not_exist(self, tmp_path):
-        assert read_settings_file(str(tmp_path / "nothing.json"), SETTING_TYPES) == {}
+        assert read_settings_file(str(tmp_path / "nothing.toml"), SETTING_TYPES) == {}
 
     def test_returns_nothing_for_an_empty_file(self, tmp_path):
-        assert self.read_json(tmp_path, "  \r\n") == {}
+        assert self.read_toml(tmp_path, "  \r\n") == {}
 
     def test_reads_a_file_with_a_bom(self, tmp_path):
-        assert self.read_json(tmp_path, '\ufeff{ "noPopup": true }') == {
-            "noPopup": True
-        }
+        assert self.read_toml(tmp_path, "\ufeffno_popup = true") == {"no_popup": True}
 
     def test_reads_arrays_as_lists_of_strings(self, tmp_path):
-        assert self.read_json(tmp_path, '{ "exclude": ["docs/**", "tests"] }')[
+        assert self.read_toml(tmp_path, 'exclude = ["docs/**", "tests"]')[
             "exclude"
         ] == ["docs/**", "tests"]
 
     def test_fails_on_an_unknown_key(self, tmp_path):
         with pytest.raises(BuildError, match="Unknown key 'foo'"):
-            self.read_json(tmp_path, '{ "foo": 1 }')
+            self.read_toml(tmp_path, "foo = 1")
 
     def test_fails_on_a_key_that_differs_only_in_case(self, tmp_path):
-        with pytest.raises(BuildError, match="Unknown key 'outputdir'"):
-            self.read_json(tmp_path, '{ "outputdir": "x" }')
+        with pytest.raises(BuildError, match="Unknown key 'Output_dir'"):
+            self.read_toml(tmp_path, 'Output_dir = "x"')
 
     @pytest.mark.parametrize(
         ("text", "message"),
         [
             (
-                '{ "includeExportIgnored": "yes" }',
-                "Setting 'includeExportIgnored' must be true / false",
+                'include_export_ignored = "yes"',
+                "Setting 'include_export_ignored' must be true / false",
             ),
             (
-                '{ "includeExportIgnored": 1 }',
-                "Setting 'includeExportIgnored' must be true / false",
+                "include_export_ignored = 1",
+                "Setting 'include_export_ignored' must be true / false",
             ),
-            ('{ "groups": "dev" }', "Setting 'groups' must be an array of strings"),
-            ('{ "groups": [1] }', "The items of setting 'groups' must be strings"),
-            ('{ "pythonVersion": 3.13 }', "Setting 'pythonVersion' must be a string"),
+            ('groups = "dev"', "Setting 'groups' must be an array of strings"),
+            ("groups = [1]", "The items of setting 'groups' must be strings"),
+            ("python_version = 3.13", "Setting 'python_version' must be a string"),
             (
-                '{ "installer": "conda" }',
+                'installer = "conda"',
                 'Setting \'installer\' must be one of "uv" / "pip"',
             ),
             (
-                '{ "installer": "Pip" }',
+                'installer = "Pip"',
                 'Setting \'installer\' must be one of "uv" / "pip"',
             ),
             (
-                '{ "installer": ["uv"] }',
+                'installer = ["uv"]',
                 'Setting \'installer\' must be one of "uv" / "pip"',
             ),
             (
-                '{ "installer": null }',
+                "installer = {}",
                 'Setting \'installer\' must be one of "uv" / "pip"',
             ),
             (
-                '{ "winPythonArchiveFormat": "ZIP" }',
-                'Setting \'winPythonArchiveFormat\' must be one of "zip" / "7z"',
+                'winpython_archive_format = "ZIP"',
+                'Setting \'winpython_archive_format\' must be one of "zip" / "7z"',
             ),
             (
-                '{ "winPythonArchiveFormat": 7 }',
-                'Setting \'winPythonArchiveFormat\' must be one of "zip" / "7z"',
+                "winpython_archive_format = 7",
+                'Setting \'winpython_archive_format\' must be one of "zip" / "7z"',
             ),
         ],
     )
     def test_fails_on_a_wrong_type(self, tmp_path, text, message):
         with pytest.raises(BuildError) as e:
-            self.read_json(tmp_path, text)
+            self.read_toml(tmp_path, text)
         assert message in str(e.value)
 
-    def test_fails_when_the_file_cannot_be_read_as_json(self, tmp_path):
-        with pytest.raises(BuildError, match="Cannot read the settings file as JSON"):
-            self.read_json(tmp_path, '{ "groups": ')
+    def test_fails_when_the_file_cannot_be_read_as_toml(self, tmp_path):
+        with pytest.raises(BuildError, match="Cannot read the settings file as TOML"):
+            self.read_toml(tmp_path, '{ "groups": ')
 
-    def test_fails_when_the_top_level_is_not_an_object(self, tmp_path):
-        with pytest.raises(
-            BuildError,
-            match=r"The top level of the settings file must be a \{ \} object",
-        ):
-            self.read_json(tmp_path, '["a"]')
+    def test_rejects_an_unknown_table(self, tmp_path):
+        with pytest.raises(BuildError, match="Unknown key 'a'"):
+            self.read_toml(tmp_path, "[a]")
+
+    def test_reads_comments_and_literal_windows_paths(self, tmp_path):
+        text = "# Personal settings\ninitial_dir = '%USERPROFILE%\\repos'\noutput_dir = 'D:\\export' # Output folder\n"
+        assert self.read_toml(tmp_path, text) == {
+            "initial_dir": "%USERPROFILE%\\repos",
+            "output_dir": "D:\\export",
+        }
+
+    @pytest.mark.parametrize(
+        "text",
+        ["groups = [", 'source = "remote"\nsource = "worktree"', "installer = null"],
+    )
+    def test_rejects_invalid_toml(self, tmp_path, text):
+        with pytest.raises(BuildError, match="Cannot read the settings file as TOML"):
+            self.read_toml(tmp_path, text)
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "pythonVersion",
+            "outputDir",
+            "initialDir",
+            "remoteRef",
+            "pruneWinPython",
+            "winPythonArchiveFormat",
+            "noPopup",
+            "virusScan",
+            "includeExportIgnored",
+            "importName",
+        ],
+    )
+    def test_rejects_old_camel_case_keys(self, tmp_path, key):
+        with pytest.raises(BuildError, match=f"Unknown key '{key}'"):
+            self.read_toml(tmp_path, f'{key} = "old"')
 
 
 class TestParseArguments:
@@ -266,13 +298,13 @@ class TestParseArguments:
         )
         assert args.project_root == "D:\\p"
         assert args.config_path is None
-        assert given == {"groups": ["a", "b", "c"], "pruneWinPython": False}
+        assert given == {"groups": ["a", "b", "c"], "prune_winpython": False}
 
     def test_maps_every_option(self):
         args, given = parse_arguments(
             [
                 "--config-path",
-                "c.json",
+                "c.toml",
                 "--python-version",
                 "3.13",
                 "--output-dir",
@@ -293,23 +325,23 @@ class TestParseArguments:
                 "--no-popup",
             ]
         )
-        assert args.config_path == "c.json"
+        assert args.config_path == "c.toml"
         assert given == {
-            "pythonVersion": "3.13",
-            "outputDir": "out",
-            "includeExportIgnored": True,
+            "python_version": "3.13",
+            "output_dir": "out",
+            "include_export_ignored": True,
             "extras": ["x"],
             "exclude": ["docs/**", "tests"],
-            "pruneWinPython": True,
-            "importName": "pkg",
+            "prune_winpython": True,
+            "import_name": "pkg",
             "installer": "pip",
-            "winPythonArchiveFormat": "7z",
-            "noPopup": True,
+            "winpython_archive_format": "7z",
+            "no_popup": True,
         }
 
     def test_every_setting_except_initial_dir_has_an_option(self):
         assert sorted(OPTION_NAMES) == sorted(
-            k for k in SETTING_TYPES if k != "initialDir"
+            k for k in SETTING_TYPES if k != "initial_dir"
         )
 
 
@@ -320,6 +352,33 @@ def test_rejects_removed_tracked_only_option(option):
 
 
 def test_rejects_removed_tracked_only_setting(tmp_path):
-    root = new_config_dir(tmp_path, '{"trackedOnly": true}')
+    root = new_config_dir(tmp_path, "trackedOnly = true")
     with pytest.raises(BuildError, match="Unknown key 'trackedOnly'"):
         effective({}, root)
+
+
+def test_ignores_old_json_files_without_warnings(tmp_path, monkeypatch):
+    root = new_config_dir(tmp_path, 'installer = "pip"')
+    write_text(tmp_path / "config" / "settings.json", '{"installer": "invalid"}')
+    write_text(tmp_path / "config" / "settings.local.json", "invalid JSON")
+    messages = []
+    monkeypatch.setattr(
+        "odekake.settings.log.write_log", lambda message: messages.append(message)
+    )
+    assert effective({}, root)["installer"] == "pip"
+    assert len(messages) == 1
+    assert messages[0].endswith("settings.toml")
+
+
+def test_rejects_json_given_by_config_path(tmp_path):
+    path = tmp_path / "old.json"
+    write_text(path, '{"installer": "pip"}')
+    with pytest.raises(BuildError, match="Cannot read the settings file as TOML"):
+        effective({}, tmp_path, str(path))
+
+
+def test_loads_local_toml_next_to_custom_config(tmp_path):
+    path = tmp_path / "custom.toml"
+    write_text(path, 'installer = "pip"')
+    write_text(tmp_path / "settings.local.toml", 'installer = "uv"')
+    assert effective({}, tmp_path / "unused", str(path))["installer"] == "uv"

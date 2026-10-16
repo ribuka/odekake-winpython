@@ -55,7 +55,7 @@ build-offline.bat --project-root D:\work\myproject
 | `--prune-winpython` / `--no-prune-winpython` | WinPython の不要なファイルを削除する / しない(下の「WinPython の不要なファイルの削除」を参照) |
 | `--virus-scan` / `--no-virus-scan` | 完成した ZIP を Microsoft Defender でスキャンし、証跡を保存する(既定は無効) |
 | `--no-popup` | 終了時のポップアップを出さない |
-| `--config-path <ファイル>` | 設定ファイル(既定は `config\settings.json`。同じフォルダの `settings.local.json` も読みます) |
+| `--config-path <ファイル>` | 設定ファイル(既定は `config\settings.toml`。同じフォルダの `settings.local.toml` も読みます) |
 
 - `--groups` などの複数の値は、`--groups a b`、`--groups a --groups b`、`--groups a,b` のどれでも指定できます。
 - 真偽値のオプションは、`--prune-winpython` / `--no-prune-winpython` のように、`--no-` を付けると設定ファイルの値を打ち消せます。
@@ -65,45 +65,43 @@ build-offline.bat --project-root D:\work\myproject
 
 ### 設定ファイル
 
-毎回同じオプションを使う場合は、設定ファイルに書けます。キー名は次のとおりです(オプション名とは書き方が違います)。
+毎回同じオプションを使う場合は、設定ファイルに書けます。キー名は、オプション名の `-` を `_` にした形です(`initial_dir` にはオプションがありません)。
 
 | キー | オプション |
 |---|---|
-| `outputDir` | `--output-dir` |
+| `output_dir` | `--output-dir` |
 | `source` | `--source` |
-| `remoteRef` | `--remote-ref` |
+| `remote_ref` | `--remote-ref` |
 | `groups` / `extras` / `exclude` | `--groups` / `--extras` / `--exclude` |
-| `includeExportIgnored` | `--include-export-ignored` |
-| `pythonVersion` | `--python-version` |
-| `importName` | `--import-name` |
+| `include_export_ignored` | `--include-export-ignored` |
+| `python_version` | `--python-version` |
+| `import_name` | `--import-name` |
 | `installer` | `--installer` |
-| `winPythonArchiveFormat` | `--winpython-archive-format` |
-| `pruneWinPython` | `--prune-winpython` |
-| `virusScan` | `--virus-scan` |
-| `noPopup` | `--no-popup` |
-| `initialDir` | (なし) |
+| `winpython_archive_format` | `--winpython-archive-format` |
+| `prune_winpython` | `--prune-winpython` |
+| `virus_scan` | `--virus-scan` |
+| `no_popup` | `--no-popup` |
+| `initial_dir` | (なし) |
 
-- `config\settings.json` … 共通の設定(コミットされるので個人のパスは書かない)
-- `config\settings.local.json` … 個人用の設定(git の管理外)
+- `config\settings.toml` … 共通の設定(コミットされるので個人のパスは書かない)
+- `config\settings.local.toml` … 個人用の設定(git の管理外)
 
-例(`config\settings.local.json`):
+例(`config\settings.local.toml`):
 
-```json
-{
-  "outputDir": "D:\\export"
-}
+```toml
+output_dir = 'D:\export'
 ```
 
-優先順位は「オプション > settings.local.json > settings.json > 既定値」です。
+0.2.1 から設定形式を TOML、キー名を snake_case に変更しました。旧 JSON 設定は読み込みません(残っていても警告しません)。個人用設定は `settings.local.toml` に書き直してください。古い camelCase キーは未知のキーとしてエラーになります。
 
-フォルダ選択ダイアログの初期位置は、`initialDir` で指定できます(オプションはありません)。
-個人のパスなので `config\settings.local.json` に書きます。`%USERPROFILE%` などの環境変数が使えます。
+優先順位は「オプション > settings.local.toml > settings.toml > 既定値」です。
+
+フォルダ選択ダイアログの初期位置は、`initial_dir` で指定できます(オプションはありません)。
+個人のパスなので `config\settings.local.toml` に書きます。`%USERPROFILE%` などの環境変数が使えます。
 絶対パスで書いてください。フォルダがないときは、警告を出して初期位置なしでダイアログを開きます。
 
-```json
-{
-  "initialDir": "%USERPROFILE%\\repos"
-}
+```toml
+initial_dir = '%USERPROFILE%\repos'
 ```
 
 ### リモートのブランチから作る
@@ -114,20 +112,18 @@ build-offline.bat --project-root D:\work\myproject --source remote --remote-ref 
 
 選んだ手元のリポジトリで指定リモートを fetch し、`.build\work\source\` にローカル clone して、そのブランチのコミットから ZIP を作ります。手元のファイルやブランチは変更しませんが、元のリポジトリの remote-tracking ref は更新します。未コミットの変更や未 add のファイルは含めません。名前・バージョン・Python の版・依存・`.gitattributes` も、そのコミットの内容を使います。
 
-毎回リモートから作るには、`config\settings.local.json` に次を書きます。ダブルクリックでも同じ設定が使われ、ダイアログでは clone 元の手元のリポジトリを選びます。
+毎回リモートから作るには、`config\settings.local.toml` に次を書きます。ダブルクリックでも同じ設定が使われ、ダイアログでは clone 元の手元のリポジトリを選びます。
 
-```json
-{
-  "source": "remote",
-  "remoteRef": "origin/main"
-}
+```toml
+source = "remote"
+remote_ref = "origin/main"
 ```
 
 - 一度だけ作業ツリーから作るには `--source worktree` を指定します。
 - `origin/master` や `upstream/main` も指定できます。タグ、手元のブランチ、`origin/HEAD` は指定できません。
 - `remote` はリポジトリ最上位のプロジェクトだけに対応します。サブフォルダを選ぶと fetch 前にエラーにします。作業ツリーモードでは従来どおりサブフォルダも選べます。
 - fetch が失敗した場合は停止します。保存済みの古い ref では続けません。
-- `exclude` と `includeExportIgnored` は通常どおり使えます。
+- `exclude` と `include_export_ignored` は通常どおり使えます。
 - clone 外を指す `uv.lock` の path 依存はエラーにします。リポジトリ内の相対パスのワークスペースメンバーは使えます。
   clone に存在しない path 依存(gitignore された wheel など)も事前にエラーにします。
 - サブモジュールの中身は含みません。Git LFS はポインタファイルが入る可能性があります。
@@ -139,16 +135,14 @@ build-offline.bat --project-root D:\work\myproject --source remote --remote-ref 
 
 ### 依存のインストール方法
 
-既定では、`uv sync` で WinPython に依存を入れます(`"installer": "uv"`)。
+既定では、`uv sync` で WinPython に依存を入れます(`installer = "uv"`)。
 `[tool.uv.sources]` と `[[tool.uv.index]]`(`explicit = true`)で指定した非公開の index にあるパッケージも入ります。
 index の認証は、普段の `uv sync` と同じもの(`UV_INDEX_<NAME>_USERNAME` などの環境変数、keyring、`uv auth` など)を使います。
 
 uv で問題が出たときは、従来の pip でも入れられます。
 
-```json
-{
-  "installer": "pip"
-}
+```toml
+installer = "pip"
 ```
 
 pip では、PyPI 以外の index にあるパッケージは入りません。そうした依存があると、WinPython をダウンロードする前にエラーで止まります。
@@ -157,12 +151,10 @@ pip では、PyPI 以外の index にあるパッケージは入りません。�
 ### WinPython のアーカイブ形式
 
 既定では、WinPython を `winpython.zip` にして外側の ZIP に入れます。
-`"winPythonArchiveFormat": "7z"` にすると、代わりに `winpython.7z` を入れます。zip より 4 割ほど小さくなります。
+`winpython_archive_format = "7z"` にすると、代わりに `winpython.7z` を入れます。zip より 4 割ほど小さくなります。
 
-```json
-{
-  "winPythonArchiveFormat": "7z"
-}
+```toml
+winpython_archive_format = "7z"
 ```
 
 - 7z は Windows 標準の `C:\Windows\System32\tar.exe` で作ります。7-Zip は要りません。
@@ -171,13 +163,13 @@ pip では、PyPI 以外の index にあるパッケージは入りません。�
 
 ### WinPython の不要なファイルの削除
 
-`config\settings.json` で `"pruneWinPython": true` にしているので、通常は WinPython の最上位から次のファイルとフォルダを削除します。
+`config\settings.toml` で `prune_winpython = true` にしているので、通常は WinPython の最上位から次のファイルとフォルダを削除します。
 展開したときに、使わないファイルが目に入らないようにするためです。
 
 - 削除する: `Jupyter Lab.exe`, `Jupyter Notebook.exe`, `Spyder.exe`, `Spyder reset.exe`, `VS Code.exe`, `notebooks\`, `wheelhouse\`
 - 残す: `python\`, `scripts\`, `IDLE (Python GUI).exe`, `WinPython Command Prompt.exe` など
 
-削除したくないときは、`config\settings.local.json` に `"pruneWinPython": false` と書くか、`--no-prune-winpython` を付けます。
+削除したくないときは、`config\settings.local.toml` に `prune_winpython = false` と書くか、`--no-prune-winpython` を付けます。
 
 ### WinPython のキャッシュ
 
@@ -258,7 +250,7 @@ PR では、GitHub Actions(ubuntu)で `ruff check` と pytest が走ります。
 
 ## Microsoft Defender によるスキャン
 
-`--virus-scan` または `"virusScan": true` で有効にします。Defender が Normal モードで有効であることが必要です。ビルドの開始時に確認し、無効なら停止します。
+`--virus-scan` または `virus_scan = true` で有効にします。Defender が Normal モードで有効であることが必要です。ビルドの開始時に確認し、無効なら停止します。
 
 完成した ZIP を一時フォルダへ展開し、内側の WinPython も展開してスキャンします。証跡は ZIP の隣の `<ZIP名>.scan.txt` に UTF-8(BOM なし)で保存します。標準出力と関連する Defender イベントの本文を含み、ユーザー名やパスもそのまま記録されます。持ち出し申請には ZIP とこのファイルを添付してください。
 

@@ -1,7 +1,7 @@
 """Packs a uv project into a ZIP bundled with WinPython, for use on offline machines.
 
 See docs/spec.md for design notes.
-Settings priority: arguments > config\\settings.local.json > config\\settings.json > defaults
+Settings priority: arguments > config\\settings.local.toml > config\\settings.toml > defaults
 
 Example:
     build-offline.bat --project-root D:\\work\\foo --groups gui --exclude "docs/**" tests
@@ -47,7 +47,7 @@ WINPYTHON_TABLE = {
     },
 }
 
-# Top-level WinPython items removed by pruneWinPython (see docs/spec.md)
+# Top-level WinPython items removed by prune_winpython (see docs/spec.md)
 PRUNE_TARGETS = [
     "Jupyter Lab.exe",
     "Jupyter Notebook.exe",
@@ -59,40 +59,27 @@ PRUNE_TARGETS = [
 ]
 
 # Setting keys and their types (see settings.SettingType), and the argument name of each key.
-# initialDir is for settings files only and has no argument (use --project-root to specify the folder by argument).
+# initial_dir is for settings files only and has no argument (use --project-root to specify the folder by argument).
 SETTING_TYPES: dict[str, settings.SettingType] = {
     "source": ("worktree", "remote"),
-    "remoteRef": "string",
-    "pythonVersion": "string",
-    "outputDir": "string",
-    "includeExportIgnored": "bool",
+    "remote_ref": "string",
+    "python_version": "string",
+    "output_dir": "string",
+    "include_export_ignored": "bool",
     "groups": "array",
     "extras": "array",
     "exclude": "array",
-    "pruneWinPython": "bool",
-    "importName": "string",
+    "prune_winpython": "bool",
+    "import_name": "string",
     "installer": ("uv", "pip"),
-    "winPythonArchiveFormat": ("zip", "7z"),
-    "virusScan": "bool",
-    "noPopup": "bool",
-    "initialDir": "string",
+    "winpython_archive_format": ("zip", "7z"),
+    "virus_scan": "bool",
+    "no_popup": "bool",
+    "initial_dir": "string",
 }
-SETTING_DEFAULTS = {"remoteRef": "origin/main"}
+SETTING_DEFAULTS = {"remote_ref": "origin/main"}
 OPTION_NAMES = {
-    "source": "--source",
-    "remoteRef": "--remote-ref",
-    "pythonVersion": "--python-version",
-    "outputDir": "--output-dir",
-    "includeExportIgnored": "--include-export-ignored",
-    "groups": "--groups",
-    "extras": "--extras",
-    "exclude": "--exclude",
-    "pruneWinPython": "--prune-winpython",
-    "importName": "--import-name",
-    "installer": "--installer",
-    "winPythonArchiveFormat": "--winpython-archive-format",
-    "virusScan": "--virus-scan",
-    "noPopup": "--no-popup",
+    key: "--" + key.replace("_", "-") for key in SETTING_TYPES if key != "initial_dir"
 }
 
 # The index that pip mode can install from (the registry in uv.lock). Dependencies from any other index are an error.
@@ -129,36 +116,36 @@ def parse_arguments(argv: list[str]) -> tuple[argparse.Namespace, dict[str, obje
         prog="build-offline",
         allow_abbrev=False,
         description="Packs a uv project into a ZIP bundled with WinPython, for use on offline machines. "
-        "Settings priority: arguments > config\\settings.local.json > config\\settings.json > defaults",
+        "Settings priority: arguments > config\\settings.local.toml > config\\settings.toml > defaults",
     )
     parser.add_argument(
         "--project-root",
         help="the uv project to pack (default: show a folder selection dialog)",
     )
     parser.add_argument(
-        "--config-path", help="settings file (default: config\\settings.json)"
+        "--config-path", help="settings file (default: config\\settings.toml)"
     )
     help_texts = {
         "source": "build from the worktree or a fetched remote branch (default: worktree)",
-        "remoteRef": "remote branch used by source remote (default: origin/main)",
-        "pythonVersion": "Python version such as 3.13 (takes priority over .python-version)",
-        "outputDir": "existing folder to write the ZIP to (default: the Downloads folder)",
-        "includeExportIgnored": "include the files marked export-ignore in .gitattributes",
+        "remote_ref": "remote branch used by source remote (default: origin/main)",
+        "python_version": "Python version such as 3.13 (takes priority over .python-version)",
+        "output_dir": "existing folder to write the ZIP to (default: the Downloads folder)",
+        "include_export_ignored": "include the files marked export-ignore in .gitattributes",
         "groups": "dependency groups to include (dev is not included by default)",
         "extras": "extras to include",
         "exclude": "git pathspec (glob) patterns of the files to leave out of the ZIP",
-        "pruneWinPython": "remove unneeded WinPython launchers and folders",
-        "importName": "package to import in the check (default: name in pyproject.toml)",
+        "prune_winpython": "remove unneeded WinPython launchers and folders",
+        "import_name": "package to import in the check (default: name in pyproject.toml)",
         "installer": "how to install the dependencies",
-        "winPythonArchiveFormat": "archive format of WinPython in the ZIP",
-        "virusScan": "scan the completed ZIP with Microsoft Defender and save evidence",
-        "noPopup": "do not show the popup at the end",
+        "winpython_archive_format": "archive format of WinPython in the ZIP",
+        "virus_scan": "scan the completed ZIP with Microsoft Defender and save evidence",
+        "no_popup": "do not show the popup at the end",
     }
     for key, kind in SETTING_TYPES.items():
         option = OPTION_NAMES.get(key)
         if option is None:
             continue
-        if key == "noPopup":
+        if key == "no_popup":
             parser.add_argument(
                 option, dest=key, action="store_const", const=True, help=help_texts[key]
             )
@@ -210,7 +197,7 @@ class Build:
         self.given = given
         self.start_time = datetime.datetime.now().astimezone()
         self.timestamp = self.start_time.strftime("%Y%m%dT%H%M%S")
-        self.no_popup = bool(given.get("noPopup"))
+        self.no_popup = bool(given.get("no_popup"))
         self.cancelled = False
         self.result_text: str | None = None
 
@@ -229,14 +216,14 @@ class Build:
             REPO_ROOT,
             SETTING_DEFAULTS,
         )
-        self.no_popup = cfg["noPopup"]
-        scanner = scan.check_defender() if cfg["virusScan"] else None
+        self.no_popup = cfg["no_popup"]
+        scanner = scan.check_defender() if cfg["virus_scan"] else None
 
         if self.args.project_root is not None:
             root = settings.resolve_full_path(self.args.project_root)
         else:
             selected = gui.select_project_folder(
-                gui.resolve_initial_dir(cfg["initialDir"])
+                gui.resolve_initial_dir(cfg["initial_dir"])
             )
             if not selected:
                 print("No folder was selected. Exiting without doing anything.")
@@ -271,9 +258,9 @@ class Build:
             source.assert_remote_project_root(root)
             prepare_work_folder()
             clone_dir = os.path.join(WORK_DIR, "source")
-            sha = source.clone_remote_source(root, clone_dir, cfg["remoteRef"])
+            sha = source.clone_remote_source(root, clone_dir, cfg["remote_ref"])
             root = clone_dir
-            provenance = f"Source: remote / Ref: {cfg['remoteRef']} / Commit: {sha}"
+            provenance = f"Source: remote / Ref: {cfg['remote_ref']} / Commit: {sha}"
             log.write_log(provenance)
         else:
             sha, clean = source.worktree_provenance(root)
@@ -291,13 +278,13 @@ class Build:
         name = py["name"].replace("_", "-")
         log.open_log_file(name, LOG_DIR, self.timestamp)
         version = project.get_project_version(root, py)
-        import_name = cfg["importName"] or py["name"].replace("-", "_")
+        import_name = cfg["import_name"] or py["name"].replace("-", "_")
         log.write_log(
             f"name: {name} / version: {version} / import check: {import_name}"
         )
 
         minor = project.get_python_minor(
-            root, self.given.get("pythonVersion"), cfg["pythonVersion"]
+            root, self.given.get("python_version"), cfg["python_version"]
         )
         if minor not in WINPYTHON_TABLE:
             raise BuildError(
@@ -306,8 +293,8 @@ class Build:
         winpython_entry = WINPYTHON_TABLE[minor]
 
         out_dir = (
-            settings.resolve_full_path(cfg["outputDir"])
-            if cfg["outputDir"]
+            settings.resolve_full_path(cfg["output_dir"])
+            if cfg["output_dir"]
             else gui.get_downloads_folder()
         )
         if not os.path.isdir(out_dir):
@@ -317,8 +304,8 @@ class Build:
         log.write_log(
             f"groups: [{', '.join(cfg['groups'])}] / extras: [{', '.join(cfg['extras'])}] / "
             f"exclude: [{', '.join(cfg['exclude'])}] / "
-            f"includeExportIgnored: {cfg['includeExportIgnored']} / pruneWinPython: {cfg['pruneWinPython']} / "
-            f"installer: {cfg['installer']} / winPythonArchiveFormat: {cfg['winPythonArchiveFormat']}"
+            f"include_export_ignored: {cfg['include_export_ignored']} / prune_winpython: {cfg['prune_winpython']} / "
+            f"installer: {cfg['installer']} / winpython_archive_format: {cfg['winpython_archive_format']}"
         )
         log.write_log(
             f"uv: {' '.join(log.run('uv', ['--version'], capture=True).split())}"
@@ -332,7 +319,7 @@ class Build:
 
         # If this PC cannot create 7z, stop before downloading WinPython (no fallback to zip; see docs/spec.md)
         tar = ziputil.get_system_tar_path()
-        if cfg["winPythonArchiveFormat"] == "7z":
+        if cfg["winpython_archive_format"] == "7z":
             ziputil.assert_seven_zip_writable(tar, WORK_DIR)
             log.write_log(
                 f"tar: {' '.join(log.run(tar, ['--version'], capture=True).split())}"
@@ -392,7 +379,7 @@ class Build:
         # --- Target project files ---
         log.write_step("Collecting the target project files")
         files = project.get_project_files(
-            root, cfg["exclude"], cfg["includeExportIgnored"]
+            root, cfg["exclude"], cfg["include_export_ignored"]
         )
         for rel in files:
             dst = os.path.join(stage_dir, rel)
@@ -467,7 +454,7 @@ class Build:
         )
 
         # --- Prune ---
-        if cfg["pruneWinPython"]:
+        if cfg["prune_winpython"]:
             log.write_step("Removing unneeded WinPython launchers and folders")
             for target in PRUNE_TARGETS:
                 path = os.path.join(wp_dir, target)
@@ -482,10 +469,10 @@ class Build:
 
         # --- ZIP ---
         log.write_step("Creating the ZIP")
-        archive_name = f"winpython.{cfg['winPythonArchiveFormat']}"
+        archive_name = f"winpython.{cfg['winpython_archive_format']}"
         winpython_archive = os.path.join(WORK_DIR, archive_name)
         log.write_log(f"Creating {archive_name}...")
-        if cfg["winPythonArchiveFormat"] == "7z":
+        if cfg["winpython_archive_format"] == "7z":
             ziputil.new_seven_zip_from_directory(winpython_archive, wp_dir, tar)
         else:
             ziputil.new_zip_from_directory(winpython_archive, wp_dir)

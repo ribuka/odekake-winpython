@@ -1,7 +1,7 @@
 /.context/
 /.build/
 /logs/
-/config/*.local.json
+/config/*.local.toml
 /tmp/
 /.venv/
 __pycache__/

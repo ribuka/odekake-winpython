@@ -1,0 +1,6 @@
+# Remove unneeded WinPython launchers and folders.
+prune_winpython = true
+# Install dependencies with uv (or choose "pip").
+installer = "uv"
+# Scan the completed ZIP with Microsoft Defender.
+virus_scan = false

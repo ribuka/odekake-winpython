@@ -48,7 +48,7 @@ def test_warns_and_returns_none_for_a_missing_folder(tmp_path, logs):
     folder = str(tmp_path / "missing")
     assert resolve_initial_dir(folder) is None
     assert len(logs) == 1
-    assert "initialDir" in logs[0] and folder in logs[0]
+    assert "initial_dir" in logs[0] and folder in logs[0]
 
 
 @windows_only
@@ -66,7 +66,7 @@ def test_warns_and_returns_none_when_the_path_is_a_file(tmp_path, logs):
 def test_fails_on_a_relative_path(value, monkeypatch):
     monkeypatch.delenv("ODEKAKE_UNDEFINED_VAR", raising=False)
     with pytest.raises(
-        BuildError, match="Setting 'initialDir' must be an absolute path"
+        BuildError, match="Setting 'initial_dir' must be an absolute path"
     ):
         resolve_initial_dir(value)
 
