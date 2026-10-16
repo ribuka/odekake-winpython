@@ -65,7 +65,6 @@ SETTING_TYPES: dict[str, settings.SettingType] = {
     "remoteRef": "string",
     "pythonVersion": "string",
     "outputDir": "string",
-    "trackedOnly": "bool",
     "includeExportIgnored": "bool",
     "groups": "array",
     "extras": "array",
@@ -84,7 +83,6 @@ OPTION_NAMES = {
     "remoteRef": "--remote-ref",
     "pythonVersion": "--python-version",
     "outputDir": "--output-dir",
-    "trackedOnly": "--tracked-only",
     "includeExportIgnored": "--include-export-ignored",
     "groups": "--groups",
     "extras": "--extras",
@@ -145,7 +143,6 @@ def parse_arguments(argv: list[str]) -> tuple[argparse.Namespace, dict[str, obje
         "remoteRef": "remote branch used by source remote (default: origin/main)",
         "pythonVersion": "Python version such as 3.13 (takes priority over .python-version)",
         "outputDir": "existing folder to write the ZIP to (default: the Downloads folder)",
-        "trackedOnly": "include only the files added to git",
         "includeExportIgnored": "include the files marked export-ignore in .gitattributes",
         "groups": "dependency groups to include (dev is not included by default)",
         "extras": "extras to include",
@@ -319,7 +316,7 @@ class Build:
         log.write_log(f"Output: {zip_path}")
         log.write_log(
             f"groups: [{', '.join(cfg['groups'])}] / extras: [{', '.join(cfg['extras'])}] / "
-            f"exclude: [{', '.join(cfg['exclude'])}] / trackedOnly: {cfg['trackedOnly']} / "
+            f"exclude: [{', '.join(cfg['exclude'])}] / "
             f"includeExportIgnored: {cfg['includeExportIgnored']} / pruneWinPython: {cfg['pruneWinPython']} / "
             f"installer: {cfg['installer']} / winPythonArchiveFormat: {cfg['winPythonArchiveFormat']}"
         )
@@ -395,7 +392,7 @@ class Build:
         # --- Target project files ---
         log.write_step("Collecting the target project files")
         files = project.get_project_files(
-            root, cfg["trackedOnly"], cfg["exclude"], cfg["includeExportIgnored"]
+            root, cfg["exclude"], cfg["includeExportIgnored"]
         )
         for rel in files:
             dst = os.path.join(stage_dir, rel)

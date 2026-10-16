@@ -74,11 +74,11 @@ def test_remote_ahead_excludes_worktree_changes_and_preserves_attributes(
     assert git(root, "rev-parse", "HEAD") != expected
     assert (root / "code.py").read_text() == "dirty\n"
     assert (clone / "code.py").read_text() == "remote\n"
-    files = get_project_files(str(clone), False, [])
+    files = get_project_files(str(clone), [])
     assert "untracked" not in files
     assert "hidden" not in files
-    assert "hidden" in get_project_files(str(clone), True, [], True)
-    assert "code.py" not in get_project_files(str(clone), False, ["*.py"])
+    assert "hidden" in get_project_files(str(clone), [], True)
+    assert "code.py" not in get_project_files(str(clone), ["*.py"])
 
 
 @pytest.mark.parametrize(
@@ -193,11 +193,13 @@ def test_worktree_clean_dirty_and_ignored_files(repository, logs):
     (root / "ignored").write_text("ignored", encoding="utf-8")
     assert worktree_provenance(str(root))[1]
     (root / "new").write_text("new", encoding="utf-8")
-    assert not worktree_provenance(str(root))[1]
-    assert any("Warning:" in message for message in logs)
+    with pytest.raises(BuildError, match="1 files have uncommitted changes"):
+        worktree_provenance(str(root))
+    assert not any("Warning:" in message for message in logs)
     (root / "new").unlink()
     (root / "code.py").write_text("dirty", encoding="utf-8")
-    assert not worktree_provenance(str(root))[1]
+    with pytest.raises(BuildError, match="1 files have uncommitted changes"):
+        worktree_provenance(str(root))
 
 
 def test_worktree_without_commits(repository, tmp_path, logs):
@@ -208,16 +210,24 @@ def test_worktree_without_commits(repository, tmp_path, logs):
     assert any("(no commits)" in message for message in logs)
 
 
-def test_build_uses_clone_for_metadata_dependencies_and_zip(
-    repository, tmp_path, monkeypatch, logs
+@pytest.mark.parametrize("mode", ["remote", "worktree"])
+def test_build_uses_selected_source_for_metadata_dependencies_and_zip(
+    repository, tmp_path, monkeypatch, logs, mode
 ):
     root, _ = repository
     expected = git(root, "rev-parse", "HEAD")
-    (root / "pyproject.toml").unlink()
-    (root / "uv.lock").unlink()
-    (root / ".python-version").write_text("3.99", encoding="utf-8")
-    (root / "code.py").write_text("dirty", encoding="utf-8")
-    (root / "extra").write_text("extra", encoding="utf-8")
+    if mode == "remote":
+        (root / "pyproject.toml").unlink()
+        (root / "uv.lock").unlink()
+        (root / ".python-version").write_text("3.99", encoding="utf-8")
+        (root / "code.py").write_text("dirty", encoding="utf-8")
+        (root / "extra").write_text("extra", encoding="utf-8")
+    else:
+        (root / ".gitignore").write_text("ignored\n", encoding="utf-8")
+        git(root, "add", ".gitignore")
+        git(root, "commit", "-m", "Ignore")
+        expected = git(root, "rev-parse", "HEAD")
+        (root / "ignored").write_text("ignored", encoding="utf-8")
     work = tmp_path / "work"
     monkeypatch.setattr(build_offline, "WORK_DIR", str(work))
     monkeypatch.setattr(log, "open_log_file", lambda *args: None)
@@ -258,7 +268,7 @@ def test_build_uses_clone_for_metadata_dependencies_and_zip(
             "--project-root",
             str(root),
             "--source",
-            "remote",
+            mode,
             "--output-dir",
             str(tmp_path),
             "--no-popup",
@@ -266,13 +276,17 @@ def test_build_uses_clone_for_metadata_dependencies_and_zip(
     )
     build = build_offline.Build(args, given)
     build.run()
-    assert uv_roots == [str(work / "source"), str(work / "source")]
+    source_root = str(work / "source") if mode == "remote" else str(root)
+    assert uv_roots == [source_root, source_root]
     with zipfile.ZipFile(next(tmp_path.glob("sample-1.0_*.zip"))) as archive:
         assert archive.read("code.py") == b"committed\n"
         assert "extra" not in archive.namelist()
         assert "hidden" not in archive.namelist()
-    assert "Source: remote" in build.result_text
-    assert "origin/main" in build.result_text
+    assert f"Source: {mode}" in build.result_text
+    if mode == "remote":
+        assert "origin/main" in build.result_text
+    else:
+        assert "Worktree: clean" in build.result_text
     assert expected in build.result_text
     assert not work.exists()
 
@@ -287,6 +301,8 @@ def test_worktree_validation_failure_preserves_previous_work(
         app.mkdir()
         for name in ("pyproject.toml", "uv.lock", ".python-version"):
             (app / name).write_bytes((root / name).read_bytes())
+        git(root, "add", ".")
+        git(root, "commit", "-m", "Add subproject")
         root = app
     work = tmp_path / "work"
     work.mkdir()
@@ -307,3 +323,64 @@ def test_worktree_validation_failure_preserves_previous_work(
     with pytest.raises(BuildError, match="Output folder not found"):
         build_offline.Build(args, given).run()
     assert marker.read_text() == "keep"
+
+
+@pytest.mark.parametrize("staged", [False, True])
+def test_unborn_project_is_dirty(repository, tmp_path, staged):
+    root = tmp_path / "unborn-project"
+    root.mkdir()
+    git(root, "init", "-b", "main")
+    for name in ("pyproject.toml", "uv.lock"):
+        (root / name).write_text("", encoding="utf-8")
+    if staged:
+        git(root, "add", ".")
+    with pytest.raises(BuildError, match="2 files have uncommitted changes"):
+        worktree_provenance(str(root))
+
+
+def test_counts_rename_and_untracked_files_without_exposing_paths(repository, logs):
+    root, _ = repository
+    git(root, "mv", "code.py", "private renamed file.py")
+    (root / "hidden").unlink()
+    (root / "private folder").mkdir()
+    for name in ("a file.txt", "日本語.txt"):
+        (root / "private folder" / name).write_text("extra", encoding="utf-8")
+    git(root, "config", "status.showUntrackedFiles", "no")
+    with pytest.raises(BuildError, match="4 files have uncommitted changes") as error:
+        worktree_provenance(str(root))
+    output = "\n".join(logs) + str(error.value)
+    for name in ("code.py", "hidden", "private", "日本語", "a file.txt"):
+        assert name not in output
+
+
+@pytest.mark.parametrize(
+    "kind", ["modified", "staged", "untracked", "deleted", "outside"]
+)
+def test_dirty_build_stops_before_preparation(repository, tmp_path, monkeypatch, kind):
+    root, _ = repository
+    target = root
+    if kind == "untracked":
+        (root / "extra").write_text("new", encoding="utf-8")
+    elif kind == "deleted":
+        (root / "code.py").unlink()
+    elif kind == "outside":
+        target = root / "app"
+        target.mkdir()
+        for name in ("pyproject.toml", "uv.lock"):
+            (target / name).write_bytes((root / name).read_bytes())
+        git(root, "add", ".")
+        git(root, "commit", "-m", "Add app")
+        (root / "code.py").write_text("modified", encoding="utf-8")
+    else:
+        (root / "code.py").write_text("modified", encoding="utf-8")
+        if kind == "staged":
+            git(root, "add", "code.py")
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("Dirty worktree reached build preparation")
+
+    monkeypatch.setattr(build_offline, "prepare_work_folder", unexpected)
+    monkeypatch.setattr(build_offline.winpython, "get_winpython_archive", unexpected)
+    args, given = build_offline.parse_arguments(["--project-root", str(target)])
+    with pytest.raises(BuildError, match="1 files have uncommitted changes"):
+        build_offline.Build(args, given).run()

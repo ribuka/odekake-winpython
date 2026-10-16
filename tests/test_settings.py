@@ -38,7 +38,7 @@ class TestGetEffectiveSettings:
         assert sorted(cfg) == sorted(SETTING_TYPES)
         assert cfg["pythonVersion"] is None
         assert cfg["outputDir"] is None
-        assert cfg["trackedOnly"] is False
+        assert cfg["includeExportIgnored"] is False
         assert cfg["pruneWinPython"] is False
         assert cfg["groups"] == []
         assert cfg["installer"] == "uv"
@@ -80,7 +80,7 @@ class TestGetEffectiveSettings:
         root = new_config_dir(
             tmp_path,
             '{ "outputDir": "from-settings", "importName": "from_settings", "groups": ["s"], "extras": ["s"], '
-            '"trackedOnly": true }',
+            '"includeExportIgnored": true }',
             '{ "outputDir": "from-local", "groups": ["l"], "extras": ["l"] }',
         )
         config_path = os.path.join(root, "config", "settings.json")
@@ -89,15 +89,15 @@ class TestGetEffectiveSettings:
         assert cfg["extras"] == ["l"]
         assert cfg["outputDir"] == "from-local"
         assert cfg["importName"] == "from_settings"
-        assert cfg["trackedOnly"] is True
+        assert cfg["includeExportIgnored"] is True
         assert cfg["noPopup"] is False
 
     def test_bool_arguments_override_the_settings_file_both_ways(self, tmp_path):
         root = new_config_dir(
-            tmp_path, '{ "trackedOnly": false, "pruneWinPython": true }'
+            tmp_path, '{ "includeExportIgnored": false, "pruneWinPython": true }'
         )
-        cfg = effective({"trackedOnly": True, "pruneWinPython": False}, root)
-        assert cfg["trackedOnly"] is True
+        cfg = effective({"includeExportIgnored": True, "pruneWinPython": False}, root)
+        assert cfg["includeExportIgnored"] is True
         assert cfg["pruneWinPython"] is False
 
     def test_splits_comma_separated_array_arguments(self, tmp_path):
@@ -196,8 +196,14 @@ class TestReadSettingsFile:
     @pytest.mark.parametrize(
         ("text", "message"),
         [
-            ('{ "trackedOnly": "yes" }', "Setting 'trackedOnly' must be true / false"),
-            ('{ "trackedOnly": 1 }', "Setting 'trackedOnly' must be true / false"),
+            (
+                '{ "includeExportIgnored": "yes" }',
+                "Setting 'includeExportIgnored' must be true / false",
+            ),
+            (
+                '{ "includeExportIgnored": 1 }',
+                "Setting 'includeExportIgnored' must be true / false",
+            ),
             ('{ "groups": "dev" }', "Setting 'groups' must be an array of strings"),
             ('{ "groups": [1] }', "The items of setting 'groups' must be strings"),
             ('{ "pythonVersion": 3.13 }', "Setting 'pythonVersion' must be a string"),
@@ -271,7 +277,6 @@ class TestParseArguments:
                 "3.13",
                 "--output-dir",
                 "out",
-                "--tracked-only",
                 "--include-export-ignored",
                 "--extras",
                 "x",
@@ -292,7 +297,6 @@ class TestParseArguments:
         assert given == {
             "pythonVersion": "3.13",
             "outputDir": "out",
-            "trackedOnly": True,
             "includeExportIgnored": True,
             "extras": ["x"],
             "exclude": ["docs/**", "tests"],
@@ -307,3 +311,15 @@ class TestParseArguments:
         assert sorted(OPTION_NAMES) == sorted(
             k for k in SETTING_TYPES if k != "initialDir"
         )
+
+
+@pytest.mark.parametrize("option", ["--tracked-only", "--no-tracked-only"])
+def test_rejects_removed_tracked_only_option(option):
+    with pytest.raises(SystemExit):
+        parse_arguments([option])
+
+
+def test_rejects_removed_tracked_only_setting(tmp_path):
+    root = new_config_dir(tmp_path, '{"trackedOnly": true}')
+    with pytest.raises(BuildError, match="Unknown key 'trackedOnly'"):
+        effective({}, root)

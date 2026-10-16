@@ -64,7 +64,7 @@ def worktree_summary(sha: str, clean: bool) -> str:
 
 
 def worktree_provenance(root: str) -> tuple[str, bool]:
-    """Returns HEAD (or an unborn marker) and whether the worktree is clean."""
+    """Records HEAD and rejects uncommitted changes without logging file names."""
     try:
         sha = log.run(
             "git",
@@ -75,14 +75,26 @@ def worktree_provenance(root: str) -> tuple[str, bool]:
         # Confirm the repository is still readable before treating HEAD as unborn.
         log.run("git", ["-C", root, "symbolic-ref", "HEAD"], capture=True)
         sha = "(no commits)"
-    clean = not log.run(
-        "git", ["-C", root, "status", "--porcelain"], capture=True
-    ).strip()
+    status = log.run(
+        "git",
+        ["-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        capture=True,
+    )
+    # With -z, renames/copies have a second path record; all other entries have one.
+    records = iter(status.split("\0"))
+    changed = 0
+    for record in records:
+        if not record:
+            continue
+        changed += 1
+        if "R" in record[:2] or "C" in record[:2]:
+            next(records)
+    clean = changed == 0
     log.write_log(worktree_summary(sha, clean))
     if not clean:
-        log.write_log(
-            "Warning: the worktree is dirty; uncommitted changes may be included.",
-            color="yellow",
+        raise BuildError(
+            f"The worktree is not clean: {changed} files have uncommitted changes "
+            "(including untracked files). Commit or remove the changes before building."
         )
     return sha, clean
 

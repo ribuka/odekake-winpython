@@ -16,6 +16,7 @@ Python の実行環境には WinPython(dot 版)を使い、依存ライブラリ
 
 - `pyproject.toml` と `uv.lock` がある
 - git リポジトリである
+- 作業ツリーから作る場合は、未コミットの変更や未 add のファイルがないこと(gitignore の対象は除く)
 - 自分のコードが `src\` の下にある(`[build-system]` を持つ構成)
 - `build_offline.py` の `WINPYTHON_TABLE` に載っている版(現在は 3.12 / 3.13 / 3.14 など)を使う(`.python-version` などで指定)。ほかの版は URL と SHA-256 を追加すれば使える
 
@@ -46,7 +47,6 @@ build-offline.bat --project-root D:\work\myproject
 | `--groups a b` | 含める依存グループ。既定では dev も含めません |
 | `--extras a b` | 含める extras |
 | `--exclude "docs/**" tests` | ZIP から除外するファイル(git pathspec の書式) |
-| `--tracked-only` | git に add 済みのファイルだけを入れる |
 | `--include-export-ignored` | `.gitattributes` で `export-ignore` が付いたファイルも入れる(既定では入れない) |
 | `--python-version 3.13` | Python のバージョンを指定(`.python-version` より優先) |
 | `--import-name <名前>` | 動作確認で import するパッケージ名(既定は pyproject の name) |
@@ -58,10 +58,10 @@ build-offline.bat --project-root D:\work\myproject
 | `--config-path <ファイル>` | 設定ファイル(既定は `config\settings.json`。同じフォルダの `settings.local.json` も読みます) |
 
 - `--groups` などの複数の値は、`--groups a b`、`--groups a --groups b`、`--groups a,b` のどれでも指定できます。
-- 真偽値のオプションは、`--tracked-only` / `--no-tracked-only` のように、`--no-` を付けると設定ファイルの値を打ち消せます。
+- 真偽値のオプションは、`--prune-winpython` / `--no-prune-winpython` のように、`--no-` を付けると設定ファイルの値を打ち消せます。
 - すべてのオプションは `build-offline.bat --help` で確認できます。
 
-0.1.x(PowerShell 版)からは、オプションの名前が変わりました(`-ProjectRoot` → `--project-root` など)。設定ファイルはそのまま使えます。
+0.1.x(PowerShell 版)からは、オプションの名前が変わりました(`-ProjectRoot` → `--project-root` など)。設定ファイルは、廃止した `trackedOnly` を除けばそのまま使えます。
 
 ### 設定ファイル
 
@@ -73,7 +73,6 @@ build-offline.bat --project-root D:\work\myproject
 | `source` | `--source` |
 | `remoteRef` | `--remote-ref` |
 | `groups` / `extras` / `exclude` | `--groups` / `--extras` / `--exclude` |
-| `trackedOnly` | `--tracked-only` |
 | `includeExportIgnored` | `--include-export-ignored` |
 | `pythonVersion` | `--python-version` |
 | `importName` | `--import-name` |
@@ -91,8 +90,7 @@ build-offline.bat --project-root D:\work\myproject
 
 ```json
 {
-  "outputDir": "D:\\export",
-  "trackedOnly": true
+  "outputDir": "D:\\export"
 }
 ```
 
@@ -129,13 +127,15 @@ build-offline.bat --project-root D:\work\myproject --source remote --remote-ref 
 - `origin/master` や `upstream/main` も指定できます。タグ、手元のブランチ、`origin/HEAD` は指定できません。
 - `remote` はリポジトリ最上位のプロジェクトだけに対応します。サブフォルダを選ぶと fetch 前にエラーにします。作業ツリーモードでは従来どおりサブフォルダも選べます。
 - fetch が失敗した場合は停止します。保存済みの古い ref では続けません。
-- `trackedOnly` は併用できますが、clone 先には未 add のファイルがないため結果は変わりません。`exclude` と `includeExportIgnored` は通常どおり使えます。
+- `exclude` と `includeExportIgnored` は通常どおり使えます。
 - clone 外を指す `uv.lock` の path 依存はエラーにします。リポジトリ内の相対パスのワークスペースメンバーは使えます。
   clone に存在しない path 依存(gitignore された wheel など)も事前にエラーにします。
 - サブモジュールの中身は含みません。Git LFS はポインタファイルが入る可能性があります。
 - 作業用 clone は成功時に削除し、失敗時には調査用に残します。
 
-どちらの source でもコミット SHA をログに出し、完了ポップアップにも source と SHA(remote では ref も)を表示します。作業ツリーでは clean / dirty も記録します。dirty(未 add のファイルを含む。gitignore の対象は除く)なら警告しますが、ビルドは続行します。コミットがない場合は `(no commits)` と表示します。
+どちらの source でもコミット SHA をログに出し、完了ポップアップにも source と SHA(remote では ref も)を表示します。作業ツリーでは clean / dirty も記録します。作業ツリーが clean でない場合は、WinPython の準備より前にエラーで停止します。`git status --porcelain` の出力が空であることが必須で、未コミットの変更と未 add のファイルが対象です。gitignore の対象は数えません。エラーには概要とファイル件数だけを出し、ファイル名や差分は出しません。サブフォルダを選んだ場合もリポジトリ全体を確認します。コミットがないプロジェクトも、必須ファイルが未コミットのため停止します。
+
+`trackedOnly` 設定と `--tracked-only` / `--no-tracked-only` は廃止しました。以前の設定ファイルに `trackedOnly` がある場合は削除してください。clean の条件を解除するオプションはありません。
 
 ### 依存のインストール方法
 
